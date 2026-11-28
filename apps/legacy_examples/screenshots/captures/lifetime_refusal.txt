@@ -1,0 +1,29 @@
+# CAPTURED TERMINAL TRANSCRIPT: lifetime_refusal.txt
+# TITLE: Lifetime: stale token and double release are refused from metadata; bounds_demo is re-run to show the lifecycle-category refusal line as well
+# CAPTURED_AT_UTC: 2026-11-23T06:29:41Z
+# TOOLCHAIN: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin
+# CWD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+# NOTE: everything between BEGIN/END markers is verbatim stdout+stderr
+#       of a real binary executed under /usr/bin/timeout 30.
+# BUILD CMD: ./build/c+ build examples/expanded/safety/lifetime_demo.cp --strict --sanitize=none -I. -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/lifetime_demo"
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/lifetime_demo
+# --- BEGIN VERBATIM OUTPUT ---
+lifetime valid_borrow OK init=1 borrow=1 live=1 write=1 read_exact=1
+lifetime stale_token_refused REFUSED released=1 retired=1 not_live=1 read=-1 cat=1 untouched=1 write=-1 wcat=1
+lifetime double_release_refused REFUSED init=1 first=1 second=-1 double_free_cat=1 live_stable=1
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# NOTE: The next command re-runs the already-built bounds_demo binary solely to capture its lifecycle-category refusal line.
+# BUILD CMD: ./build/c+ build examples/expanded/safety/bounds_demo.cp --strict --sanitize=none -I. -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/bounds_demo"
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/bounds_demo
+# --- BEGIN VERBATIM OUTPUT ---
+bounds exact_fit OK cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1
+bounds one_over REFUSED span_1over=0 span_tail=0 query=-1 bounds_cat=1
+bounds interior_pointer OK interior_has_metadata=0 contains_24=1 contains_25=0
+bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# TOKEN_OK: lifetime stale_token_refused REFUSED released=1 retired=1 not_live=1 read=-1 cat=1
+# TOKEN_OK: lifetime double_release_refused REFUSED init=1 first=1 second=-1 double_free_cat=1
+# TOKEN_OK: bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1
+# VERDICT: PASS -- every expected refusal token was found in real captured output

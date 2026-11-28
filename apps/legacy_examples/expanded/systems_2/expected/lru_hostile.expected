@@ -1,0 +1,9 @@
+LRU REFUSE cap cat= 2 code= 101 msg= capacity out of range
+LRU REFUSE cap cat= 2 code= 101 msg= capacity out of range
+LRU REFUSE put cat= 2 code= 101 msg= zero capacity
+LRU REFUSE put cat= 2 code= 101 msg= key
+LRU REFUSE put cat= 2 code= 101 msg= value
+LRU REFUSE put cat= 2 code= 101 msg= key
+LRU REFUSE get cat= 1 code= 106 msg= missing key
+LRU REFUSE bogus cat= 1 code= 108 msg= unknown command
+LRU_SUMMARY 8 0 8 0

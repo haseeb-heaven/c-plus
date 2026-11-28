@@ -1,0 +1,21 @@
+Safety breakers: must be blocked in DEFAULT and STRICT
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+01_aliased_uaf_via_struct        --default  PASS
+01_aliased_uaf_via_struct        --strict   PASS
+02_uaf_address_reuse_f2          --default  PASS
+02_uaf_address_reuse_f2          --strict   PASS
+03_union_type_confusion          --default  PASS
+03_union_type_confusion          --strict   PASS
+04_heap_oob_via_pointer_param    --default  PASS
+04_heap_oob_via_pointer_param    --strict   PASS
+05_data_race_shared_mut          --default  PASS
+05_data_race_shared_mut          --strict   PASS
+06_dangling_stack_out_param      --default  PASS
+06_dangling_stack_out_param      --strict   PASS
+07_func_ptr_format_bypass        --default  PASS
+07_func_ptr_format_bypass        --strict   PASS
+08_struct_return_dangling_stack  --default  PASS
+08_struct_return_dangling_stack  --strict   PASS
+
+failures: 0

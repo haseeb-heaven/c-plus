@@ -1,0 +1,23 @@
+external_projects/cli_app/original/xdump.c:198:13: warning: [CPLUS-FFI] 'strtok' keeps static state; a second call invalidates earlier results
+      token = strtok(format, ";");
+              ^~~~~~
+help: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+
+external_projects/cli_app/original/xdump.c:62:26: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc
+      unsigned char buffer[columns_opt];
+                           ^~~~~~~~~~~
+help: use C+ managed allocations and cplus_* helpers
+external_projects/cli_app/original/xdump.c:53:5: warning: [CPLUS-FFI] format string in vprintf is not a string literal (CWE-134; attacker-controlled format)
+      vprintf(fmt, args);
+      ^~~~~~~
+external_projects/cli_app/original/xdump.c:119:20: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+                  if(i % group == 0)
+                     ^
+external_projects/cli_app/original/xdump.c:331:30: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+              char *filename = argv[i];
+                               ^~~~
+external_projects/cli_app/original/xdump.c:184:29: error: [CPLUS-LIFETIME] variable 'endptr' is uninitialized (read before it is initialized)
+      if(errno != 0 || str == endptr || (code < 0 || code > 255)) {
+                              ^~~~~~
+external_projects/cli_app/original/xdump.c:238:29: error: [CPLUS-LIFETIME] variable 'endptr' is uninitialized (read before it is initialized)
+      if(errno != 0 || str == endptr) {
+                              ^~~~~~

@@ -1,0 +1,21 @@
+
+cp_to_c_lib.o:
+0000000000000000 T _CpAdder_apply
+0000000000000644 T _CpBuffer_read
+000000000000056c T _CpBuffer_write
+0000000000000740 T _CpLayoutProbe_fill
+0000000000000170 T _CpRecordValidator_check
+0000000000000470 T _CpScaler_apply
+00000000000007e0 T _cp_to_c_add
+0000000000000b80 T _cp_to_c_buffer_create
+0000000000000f34 T _cp_to_c_buffer_destroy
+0000000000000e88 T _cp_to_c_buffer_meta
+0000000000000e08 T _cp_to_c_buffer_read
+0000000000000cb0 T _cp_to_c_buffer_write
+0000000000000ff0 T _cp_to_c_echo_err
+0000000000000a8c T _cp_to_c_layout_report
+0000000000000814 T _cp_to_c_mixcall
+0000000000000a1c T _cp_to_c_ptr_roundtrip
+00000000000009b8 T _cp_to_c_record_by_ptr
+0000000000000968 T _cp_to_c_record_by_value
+0000000000000ab4 T _cp_to_c_scale_sum

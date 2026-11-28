@@ -1,0 +1,50 @@
+C+ optimizer / safety-mode equivalence suite
+====================================================================
+binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version      : C+ 0.1.0
+generated    : 2026-11-23T12:44:29
+timeout      : 60s build / 30s run per subprocess
+workers      : 4
+
+BUILD CONFIGURATIONS (exact flags; all include --sanitize=none)
+--------------------------------------------------------------------
+  debug      --debug --sanitize=none            -O0 plus debug info (compiler default)
+             c+ build <src> --debug --sanitize=none --emit-c <out.c> -o <bin>
+  release    --release --sanitize=none          -O2 (native guards must stay on)
+             c+ build <src> --release --sanitize=none --emit-c <out.c> -o <bin>
+  o0         -O0 --sanitize=none                -O0 passed through as a C+ flag
+             c+ build <src> -O0 --sanitize=none --emit-c <out.c> -o <bin>
+  o2         -O2 --sanitize=none                -O2 passed through as a C+ flag
+             c+ build <src> -O2 --sanitize=none --emit-c <out.c> -o <bin>
+  guards_on  --default --sanitize=none          DEFAULT mode, native guards present
+             c+ build <src> --default --sanitize=none --emit-c <out.c> -o <bin>
+  guards_off --legacy-c --sanitize=none         Legacy-C mode, native guards disabled
+             c+ build <src> --legacy-c --sanitize=none --emit-c <out.c> -o <bin>
+
+SUMMARY
+--------------------------------------------------------------------
+cases                       : 11
+cases passed                : 11
+cases failed                : 0
+configs per case            : 6
+builds                      : 66
+runs                        : 66
+behavior checks (stdout+exit): 132
+guard checks                : 174 (174 passed, 0 failed)
+identical stdout/exit cases : 11 / 11
+difference entries          : 0
+
+BY FAMILY
+--------------------------------------------------------------------
+  allocation           cases= 2 passed= 2 failed= 0
+  arithmetic           cases= 2 passed= 2 failed= 0
+  bounds               cases= 2 passed= 2 failed= 0
+  mixed                cases= 1 passed= 1 failed= 0
+  pointer_formation    cases= 2 passed= 2 failed= 0
+  raii_cleanup         cases= 2 passed= 2 failed= 0
+
+DIFFERENCES / FAILURES (exact case + config + commands)
+--------------------------------------------------------------------
+  none - all six configurations produce identical stdout/exit
+
+Full records: results/summary.json ; logs: results/logs/

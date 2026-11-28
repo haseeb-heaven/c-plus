@@ -1,0 +1,7 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/f_pointer_arithmetic_beyond_array.c:11:14: error: [CPLUS-BOUNDS] pointer arithmetic more than one past the end of 'a'
+    int *p = a + 5;
+               ^
+help: use C+ managed allocations and cplus_* helpers
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/f_pointer_arithmetic_beyond_array.c:11:12: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] pointer arithmetic outside array 'a'
+    int *p = a + 5;
+             ^

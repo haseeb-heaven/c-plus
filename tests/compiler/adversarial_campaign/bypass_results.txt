@@ -1,0 +1,42 @@
+Adversarial bypass verification — 2026-11-23T14:08:08.834358+00:00
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+S2_relay_free                rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_relay_free.c:5:57: error: [CPLUS-OWNER] double free of 'p' |   int main(void){ int *p = malloc(sizeof(int)); relay(p); free(p); return 0; } |                                                           ^~~~ | 
+S2_fnptr_free                rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_fnptr_free.c:4:77: error: [CPLUS-OWNER] double free of 'p' |   int main(void){ int *p = malloc(sizeof(int)); void(*f)(int*)=consume; f(p); free(p); return 0; } |                                              
+S3_return_chain              rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S3_return_chain.c:5:76: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'q' |   int main(void){ int *p=malloc(sizeof(int)); int *q=id2(p); free(p); return *q; } |  
+S4_null_wrapper              rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S4_null_wrapper.c:5:17: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'wrap' |   int main(void){ wrap(NULL); return 0; } |                   ^~~~
+S6_global_alias_uaf          rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_uaf.c:6:70: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p' |   int main(void){ int *p=malloc(sizeof(int)); setg(p); freeg(); return *p; } |    
+S8_self_recursion_oob        rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c:3:45: error: [CPLUS-BOUNDS] array index 10 from recursive call is out of bounds of array 'a' of length 4 |   int f(int i){ if(i<=0) return a[0]; return a[i] + f(i-1); } |                
+S1_flag_divergence           rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S1_flag_divergence.c:7:15: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: released pointer 'p' passed to 'consume' |     consume(p); consume(p); |                 ^~~~~~~ | help: suggested correc
+P1_int_launder_uaf           rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_int_launder_uaf.c:4:103: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'q' |   int main(void){ int *p=malloc(sizeof(int)); uintptr_t u=(uintptr_t)p; int *q=(in
+P1_memcpy_alias_uaf          rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_memcpy_alias_uaf.c:4:66: error: [CPLUS-FFI] sizeof(p) is the pointer size, not the buffer size; pass the element count instead |   int main(void){ int *p=malloc(sizeof(int)); int *q; memcpy(&q,&p,sizeof p); 
+P1_union_pun_uaf             rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_union_pun_uaf.c:4:71: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'u.i' |   int main(void){ union U u; u.p=malloc(sizeof(int)); free(u.p); return *u.i; } |  
+P1_cast_alias_uaf            rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_cast_alias_uaf.c:3:84: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'q' |   int main(void){ int *p=malloc(sizeof(int)); int *q=(int*)(void*)p; free(p); return
+T1_fnptr_double_free         rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c:3:80: error: [CPLUS-OWNER] double free of 'p' |   int main(void){ int *p=malloc(4); if(!p) return 1; void(*f)(void*)=free; f(p); free(p); return 0; } |                                    
+T1_indirect_realloc          rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_indirect_realloc.c:6:16: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p' |    printf("%d\n",*p); free(q); return 0; } |                  ^ | help: suggested 
+A1_stale_nonzero             rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_stale_nonzero.c:3:39: error: [CPLUS-ARITH] division by zero cannot be excluded |   int f(int d){ if(d){ d=zero(); return 100/d; } return 0; } |                                         ^~~
+A1_compound_assign           rc=0        accepted_by_strict=True
+A1_incdec                    rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_incdec.c:3:85: error: [CPLUS-ARITH] signed integer overflow in unary minus of minimum value |   int main(void){ volatile int x=INT_MAX; x++; volatile int m=INT_MIN; volatile int n=-m; return x+n; } |        
+A1_implicit_narrow           rc=0        accepted_by_strict=True
+A1_float_to_int              rc=0        accepted_by_strict=True
+CTRL_direct_double_free      rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c:3:54: error: [CPLUS-OWNER] double free of 'p' |   int main(void){ int *p=malloc(sizeof(int)); free(p); free(p); return 0; } |                                                        ^~~
+CTRL_direct_null             rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c:4:17: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref' |   int main(void){ deref(NULL); return 0; } |                   ^~~~~
+CTRL_direct_overflow         rc=1        accepted_by_strict=False
+    stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: error: [CPLUS-ARITH] signed integer overflow in addition |   int main(void){ volatile int x=INT_MAX; return x+1; } |                                                  ^

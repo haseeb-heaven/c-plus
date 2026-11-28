@@ -1,0 +1,10 @@
+c2x	yes	(none - compiled cleanly)
+gnu2x	yes	(none - compiled cleanly)
+c23	no	error: invalid value 'c23' in '-std=c23'
+gnu23	no	error: invalid value 'gnu23' in '-std=gnu23'
+c2y	no	error: invalid value 'c2y' in '-std=c2y'
+c26	no	error: invalid value 'c26' in '-std=c26'
+iso9899:2024	no	error: invalid value 'iso9899:2024' in '-std=iso9899:2024'
+c2b	no	error: invalid value 'c2b' in '-std=c2b'
+c2y_draft	no	error: invalid value 'c2y_draft' in '-std=c2y_draft'
+gnu2y	no	error: invalid value 'gnu2y' in '-std=gnu2y'

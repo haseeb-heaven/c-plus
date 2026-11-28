@@ -1,0 +1,110 @@
+/* C+ modern standard library: unified Allocator interface.
+ *
+ * MODERN LAYER ONLY -- these allocator-aware structs are NOT part of the
+ * legacy checked-heap ABI.  The existing managed/checked heap (cplus_alloc /
+ * cplus_release + generation metadata) stays the DEFAULT fallback allocator
+ * and the upstream backing allocator for arena blocks and pool slabs.
+ *
+ * The interface is plain C syntax: a vtable struct plus a context pointer.
+ * All operations take the context first; `align` is always a power of two.
+ * `realloc` receives old_size so monotonic allocators can detect a top-of-stack
+ * block and grow in place; `free` receives size for the same reason.  A
+ * monotonic allocator implements `free` as a no-op and `reset` as an O(1)
+ * rewind.  Allocators never report failure by abort: alloc/realloc return NULL
+ * and the caller's `error*` receives a category/code (see error.hp).
+ */
+#ifndef CPLUS_STD_ALLOC_IFACE_HP
+#define CPLUS_STD_ALLOC_IFACE_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+#ifndef STDLIB_ALIGN_DEFAULT
+/* 16 bytes matches max_align_t on the supported ABIs and makes pool slots
+ * and arena block bases safely usable for wider scalar/vector types. */
+#define STDLIB_ALIGN_DEFAULT 16u
+#endif
+
+typedef struct stdlib_allocator {
+    void *ctx;
+    void *(*alloc)(void *ctx, size_t size, size_t align);
+    void *(*realloc)(void *ctx, void *ptr, size_t old_size,
+                     size_t new_size, size_t align);
+    void (*release)(void *ctx, void *ptr, size_t size);
+    void (*reset)(void *ctx);
+} stdlib_allocator;
+
+/* Dispatch helpers: NULL allocator means the checked HeapAllocator. */
+static inline void *stdlib_allocate(const stdlib_allocator *a, size_t size,
+                                    size_t align, error *err) {
+    void *p;
+    error_reset(err);
+    if (align == 0) align = STDLIB_ALIGN_DEFAULT;
+    if ((align & (align - 1u)) != 0 || size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "allocator: invalid size/alignment"),
+               (void *)0;
+    if (a == 0 || a->alloc == 0) {
+        /* Default: checked heap via stdlib_alloc so failure injection and
+         * generation metadata stay active (cplus_alloc alone bypasses them). */
+        p = stdlib_alloc(size);
+        /* stdlib_alloc already reported via stdlib_note on refusal, including
+         * injected failures; callers observe the NULL result. */
+        return p;
+    }
+    p = a->alloc(a->ctx, size, align);
+    if (p == (void *)0)
+        stdlib_note(STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                    "allocator: allocation refused");
+    return p;
+}
+
+static inline void *stdlib_reallocate(const stdlib_allocator *a, void *ptr,
+                                      size_t old_size, size_t new_size,
+                                      size_t align, error *err) {
+    void *p;
+    error_reset(err);
+    if (align == 0) align = STDLIB_ALIGN_DEFAULT;
+    if ((align & (align - 1u)) != 0 || new_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "allocator: invalid size/alignment"),
+               (void *)0;
+    if (a == 0 || a->realloc == 0) {
+        p = stdlib_realloc(ptr, new_size);
+        /* stdlib_realloc reports refusals itself. */
+        return p;
+    }
+    p = a->realloc(a->ctx, ptr, old_size, new_size, align);
+    if (p == (void *)0)
+        error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                       "allocator: realloc refused");
+    return p;
+}
+
+static inline void stdlib_deallocate(const stdlib_allocator *a, void *ptr,
+                                     size_t size) {
+    if (ptr == (void *)0) return;
+    if (a == 0 || a->release == 0) { stdlib_release(ptr); return; }
+    a->release(a->ctx, ptr, size);
+}
+
+static inline void stdlib_allocator_reset(const stdlib_allocator *a) {
+    if (a != 0 && a->reset != 0) a->reset(a->ctx);
+}
+
+/* The canonical HeapAllocator adapter: vtable with no context. */
+static inline stdlib_allocator stdlib_heap_allocator(void) {
+    stdlib_allocator a;
+    a.ctx = (void *)0;
+    a.alloc = (void *)0;       /* NULL => checked heap dispatch above */
+    a.realloc = (void *)0;
+    a.release = (void *)0;
+    a.reset = (void *)0;       /* heap has no bulk reset */
+    return a;
+}
+
+#endif /* CPLUS_STD_ALLOC_IFACE_HP */

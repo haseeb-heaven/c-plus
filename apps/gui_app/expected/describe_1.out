@@ -1,0 +1,15 @@
+GUI_WIDGETS scenario=1 title=toolbar count=8 columns=4 grid=320x80
+GUI_LAYOUT cell=80x40 origin=0,0
+WIDGETS 8
+W 10 4 1 1 78 38 3 tools
+W 11 1 81 1 78 38 3 NEW
+W 12 1 161 1 78 38 3 OPEN
+W 13 1 241 1 78 38 3 SAVE
+W 14 2 1 41 78 38 3 sep
+W 15 1 81 41 78 38 3 CUT
+W 16 1 161 41 78 38 3 COPY
+W 17 1 241 41 78 38 3 PASTE
+GUI_SERIAL bytes=215 crc32=18eaae2f
+GUI_HIT p=5,5 index=0 id=10 label=tools
+GUI_HIT p=245,45 index=7 id=17 label=PASTE
+GUI_RESULT describe:1,0,0 OK

@@ -1,0 +1,641 @@
+{
+  "generated_utc": "2026-11-23T08:04:02+00:00",
+  "config": {
+    "cplus_bin": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+    "rustc": "/Users/haseeb-mir/.cargo/bin/rustc",
+    "samples": 5,
+    "warmups": 1,
+    "timeout_seconds": 60.0,
+    "time_binary": "/usr/bin/time"
+  },
+  "counts": {
+    "pairs": 4,
+    "builds_attempted": 16,
+    "builds_succeeded": 16,
+    "runs_measured": 16,
+    "mismatches": 0,
+    "failures": 0
+  },
+  "programs": [
+    {
+      "name": "bounds_sum",
+      "sources": {
+        "cplus": "pairs/bounds_sum.cp",
+        "rust": "pairs/bounds_sum.rs"
+      },
+      "results": [
+        {
+          "key": "cplus_release",
+          "label": "c+ --release --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.873708,
+          "stdout": "bounds_sum 1200000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.078278,
+          "peak_rss_bytes": 1703936,
+          "runs": [
+            {
+              "wall_seconds": 0.098849,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.09264,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.078278,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.090045,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.089261,
+              "peak_rss_bytes": 1703936
+            }
+          ]
+        },
+        {
+          "key": "cplus_debug",
+          "label": "c+ --debug --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.256866,
+          "stdout": "bounds_sum 1200000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.219692,
+          "peak_rss_bytes": 1703936,
+          "runs": [
+            {
+              "wall_seconds": 0.290284,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.237899,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.219692,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.324866,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.305737,
+              "peak_rss_bytes": 1687552
+            }
+          ]
+        },
+        {
+          "key": "rust_opt",
+          "label": "rustc -O",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 1.129057,
+          "stdout": "bounds_sum 1200000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.006344,
+          "peak_rss_bytes": 1867776,
+          "runs": [
+            {
+              "wall_seconds": 0.006849,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.006415,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.006344,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.007401,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.007741,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        },
+        {
+          "key": "rust_noopt",
+          "label": "rustc -C opt-level=0",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 0.157206,
+          "stdout": "bounds_sum 1200000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 1.036731,
+          "peak_rss_bytes": 1867776,
+          "runs": [
+            {
+              "wall_seconds": 1.036731,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.108051,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.080959,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.04539,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.236772,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        }
+      ],
+      "ratios": {
+        "time_cplus_release_over_rust_opt": 12.3389,
+        "time_cplus_debug_over_rust_opt": 34.6299,
+        "time_cplus_release_over_cplus_debug": 0.3563,
+        "time_rust_opt_over_rust_noopt": 0.0061,
+        "rss_cplus_release_over_rust_opt": 0.9123,
+        "rss_cplus_debug_over_rust_opt": 0.9123,
+        "rss_cplus_release_over_cplus_debug": 1.0,
+        "rss_rust_opt_over_rust_noopt": 1.0
+      },
+      "stdout": "bounds_sum 1200000000",
+      "stdout_match": true,
+      "failures": [],
+      "mismatches": {}
+    },
+    {
+      "name": "call_chain",
+      "sources": {
+        "cplus": "pairs/call_chain.cp",
+        "rust": "pairs/call_chain.rs"
+      },
+      "results": [
+        {
+          "key": "cplus_release",
+          "label": "c+ --release --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.246286,
+          "stdout": "call_chain 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.23651,
+          "peak_rss_bytes": 1671168,
+          "runs": [
+            {
+              "wall_seconds": 0.309966,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.23651,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.242882,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.263098,
+              "peak_rss_bytes": 1654784
+            },
+            {
+              "wall_seconds": 0.318706,
+              "peak_rss_bytes": 1654784
+            }
+          ]
+        },
+        {
+          "key": "cplus_debug",
+          "label": "c+ --debug --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.231065,
+          "stdout": "call_chain 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.78098,
+          "peak_rss_bytes": 1671168,
+          "runs": [
+            {
+              "wall_seconds": 0.844203,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.953727,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.835906,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.78098,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.858883,
+              "peak_rss_bytes": 1671168
+            }
+          ]
+        },
+        {
+          "key": "rust_opt",
+          "label": "rustc -O",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 0.164154,
+          "stdout": "call_chain 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.226066,
+          "peak_rss_bytes": 1867776,
+          "runs": [
+            {
+              "wall_seconds": 0.241025,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.266628,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.310392,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.258961,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.226066,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        },
+        {
+          "key": "rust_noopt",
+          "label": "rustc -C opt-level=0",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 0.147578,
+          "stdout": "call_chain 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 1.065013,
+          "peak_rss_bytes": 1851392,
+          "runs": [
+            {
+              "wall_seconds": 1.150367,
+              "peak_rss_bytes": 1851392
+            },
+            {
+              "wall_seconds": 1.098485,
+              "peak_rss_bytes": 1851392
+            },
+            {
+              "wall_seconds": 1.089944,
+              "peak_rss_bytes": 1851392
+            },
+            {
+              "wall_seconds": 1.065013,
+              "peak_rss_bytes": 1851392
+            },
+            {
+              "wall_seconds": 1.074336,
+              "peak_rss_bytes": 1851392
+            }
+          ]
+        }
+      ],
+      "ratios": {
+        "time_cplus_release_over_rust_opt": 1.0462,
+        "time_cplus_debug_over_rust_opt": 3.4547,
+        "time_cplus_release_over_cplus_debug": 0.3028,
+        "time_rust_opt_over_rust_noopt": 0.2123,
+        "rss_cplus_release_over_rust_opt": 0.8947,
+        "rss_cplus_debug_over_rust_opt": 0.8947,
+        "rss_cplus_release_over_cplus_debug": 1.0,
+        "rss_rust_opt_over_rust_noopt": 1.0088
+      },
+      "stdout": "call_chain 1867997231812350465",
+      "stdout_match": true,
+      "failures": [],
+      "mismatches": {}
+    },
+    {
+      "name": "lcg",
+      "sources": {
+        "cplus": "pairs/lcg.cp",
+        "rust": "pairs/lcg.rs"
+      },
+      "results": [
+        {
+          "key": "cplus_release",
+          "label": "c+ --release --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.239189,
+          "stdout": "lcg 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.236175,
+          "peak_rss_bytes": 1687552,
+          "runs": [
+            {
+              "wall_seconds": 0.236175,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.243981,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.305609,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.335942,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.473165,
+              "peak_rss_bytes": 1687552
+            }
+          ]
+        },
+        {
+          "key": "cplus_debug",
+          "label": "c+ --debug --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.237094,
+          "stdout": "lcg 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.453026,
+          "peak_rss_bytes": 1687552,
+          "runs": [
+            {
+              "wall_seconds": 0.525063,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.661903,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.459116,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.453026,
+              "peak_rss_bytes": 1671168
+            },
+            {
+              "wall_seconds": 0.609648,
+              "peak_rss_bytes": 1671168
+            }
+          ]
+        },
+        {
+          "key": "rust_opt",
+          "label": "rustc -O",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 0.164468,
+          "stdout": "lcg 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.23834,
+          "peak_rss_bytes": 1867776,
+          "runs": [
+            {
+              "wall_seconds": 0.261222,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.23834,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.24439,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.279944,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.322284,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        },
+        {
+          "key": "rust_noopt",
+          "label": "rustc -C opt-level=0",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 0.161864,
+          "stdout": "lcg 1867997231812350465",
+          "stdout_stable": true,
+          "best_wall_seconds": 1.16023,
+          "peak_rss_bytes": 1867776,
+          "runs": [
+            {
+              "wall_seconds": 1.16023,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.368114,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.266246,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.274784,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 1.209414,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        }
+      ],
+      "ratios": {
+        "time_cplus_release_over_rust_opt": 0.9909,
+        "time_cplus_debug_over_rust_opt": 1.9008,
+        "time_cplus_release_over_cplus_debug": 0.5213,
+        "time_rust_opt_over_rust_noopt": 0.2054,
+        "rss_cplus_release_over_rust_opt": 0.9035,
+        "rss_cplus_debug_over_rust_opt": 0.9035,
+        "rss_cplus_release_over_cplus_debug": 1.0,
+        "rss_rust_opt_over_rust_noopt": 1.0
+      },
+      "stdout": "lcg 1867997231812350465",
+      "stdout_match": true,
+      "failures": [],
+      "mismatches": {}
+    },
+    {
+      "name": "struct_sum",
+      "sources": {
+        "cplus": "pairs/struct_sum.cp",
+        "rust": "pairs/struct_sum.rs"
+      },
+      "results": [
+        {
+          "key": "cplus_release",
+          "label": "c+ --release --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.317678,
+          "stdout": "struct_sum 4410000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.038692,
+          "peak_rss_bytes": 1703936,
+          "runs": [
+            {
+              "wall_seconds": 0.057141,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.05699,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.038692,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.044465,
+              "peak_rss_bytes": 1703936
+            },
+            {
+              "wall_seconds": 0.042773,
+              "peak_rss_bytes": 1703936
+            }
+          ]
+        },
+        {
+          "key": "cplus_debug",
+          "label": "c+ --debug --sanitize=none",
+          "language": "C+",
+          "ok": true,
+          "compile_seconds": 0.298133,
+          "stdout": "struct_sum 4410000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.239078,
+          "peak_rss_bytes": 1720320,
+          "runs": [
+            {
+              "wall_seconds": 0.339517,
+              "peak_rss_bytes": 1720320
+            },
+            {
+              "wall_seconds": 0.264744,
+              "peak_rss_bytes": 1720320
+            },
+            {
+              "wall_seconds": 0.260317,
+              "peak_rss_bytes": 1687552
+            },
+            {
+              "wall_seconds": 0.239078,
+              "peak_rss_bytes": 1720320
+            },
+            {
+              "wall_seconds": 0.27693,
+              "peak_rss_bytes": 1703936
+            }
+          ]
+        },
+        {
+          "key": "rust_opt",
+          "label": "rustc -O",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 1.023185,
+          "stdout": "struct_sum 4410000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.021563,
+          "peak_rss_bytes": 1867776,
+          "runs": [
+            {
+              "wall_seconds": 0.02606,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.022378,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.021563,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.024796,
+              "peak_rss_bytes": 1867776
+            },
+            {
+              "wall_seconds": 0.022052,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        },
+        {
+          "key": "rust_noopt",
+          "label": "rustc -C opt-level=0",
+          "language": "Rust",
+          "ok": true,
+          "compile_seconds": 0.213469,
+          "stdout": "struct_sum 4410000000",
+          "stdout_stable": true,
+          "best_wall_seconds": 0.264435,
+          "peak_rss_bytes": 1884160,
+          "runs": [
+            {
+              "wall_seconds": 0.302375,
+              "peak_rss_bytes": 1884160
+            },
+            {
+              "wall_seconds": 0.264435,
+              "peak_rss_bytes": 1884160
+            },
+            {
+              "wall_seconds": 0.282325,
+              "peak_rss_bytes": 1884160
+            },
+            {
+              "wall_seconds": 0.273501,
+              "peak_rss_bytes": 1884160
+            },
+            {
+              "wall_seconds": 0.292753,
+              "peak_rss_bytes": 1867776
+            }
+          ]
+        }
+      ],
+      "ratios": {
+        "time_cplus_release_over_rust_opt": 1.7944,
+        "time_cplus_debug_over_rust_opt": 11.0874,
+        "time_cplus_release_over_cplus_debug": 0.1618,
+        "time_rust_opt_over_rust_noopt": 0.0815,
+        "rss_cplus_release_over_rust_opt": 0.9123,
+        "rss_cplus_debug_over_rust_opt": 0.9211,
+        "rss_cplus_release_over_cplus_debug": 0.9905,
+        "rss_rust_opt_over_rust_noopt": 0.9913
+      },
+      "stdout": "struct_sum 4410000000",
+      "stdout_match": true,
+      "failures": [],
+      "mismatches": {}
+    }
+  ]
+}

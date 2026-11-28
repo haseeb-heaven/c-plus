@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/realloc_stale.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/realloc_stale.primary.bin
+returncode: 1
+timed_out: False
+
+<SRC>:5:68: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer
+    int *q=realloc(p,64); if(!q){free(p);return 2;} printf("v=%d\n", p[0]); free(q); return 0; }
+                                                                     ^
+help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+note: allocation: <SRC>:4

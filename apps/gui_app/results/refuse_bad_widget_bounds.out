@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-widget-bounds category=1 code=108 message=widgets: invalid widget bounds
+GUI_RESULT refuse bad-widget-bounds REFUSED 108

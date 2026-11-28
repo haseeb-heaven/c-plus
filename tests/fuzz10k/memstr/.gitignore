@@ -1,0 +1,8 @@
+# Generated artifacts for the FUZZ10K memstr evidence suite (never commit).
+results/
+fuzz10k_memstr
+fuzz10k_memstr_ubsan
+fuzz10k_memstr_asan
+*.o
+*.out
+*.dSYM/

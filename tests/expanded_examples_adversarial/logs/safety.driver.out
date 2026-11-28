@@ -1,0 +1,13 @@
+ADV_EXPANDED memcpy_s_demo oversized_argv REFUSED 0
+ADV_EXPANDED memcpy_s_demo size_max_argv REFUSED 0
+ADV_EXPANDED memcpy_s_demo empty_argv REFUSED 0
+ADV_EXPANDED memcpy_s_demo null_like_argv REFUSED 0
+ADV_EXPANDED bounds_demo oversized_argv REFUSED 0
+ADV_EXPANDED bounds_demo size_max_argv REFUSED 0
+ADV_EXPANDED bounds_demo empty_argv REFUSED 0
+ADV_EXPANDED bounds_demo null_like_argv REFUSED 0
+ADV_EXPANDED lifetime_demo oversized_argv REFUSED 0
+ADV_EXPANDED lifetime_demo size_max_argv REFUSED 0
+ADV_EXPANDED lifetime_demo empty_argv REFUSED 0
+ADV_EXPANDED lifetime_demo null_like_argv REFUSED 0
+ADV_EXPANDED_SUBTOTAL safety cases=12 refused=12 crashed=0 unexpected_ok=0 blocked=0

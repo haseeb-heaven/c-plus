@@ -1,0 +1,22 @@
+command: rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__rust.bin
+returncode: 1
+timed_out: False
+
+error[E0382]: use of moved value: `v`
+ --> <SRC>:4:10
+  |
+2 |     let v = Box::new(1i32);
+  |         - move occurs because `v` has type `Box<i32>`, which does not implement the `Copy` trait
+3 |     drop(v);
+  |          - value moved here
+4 |     drop(v);
+  |          ^ value used here after move
+  |
+help: consider cloning the value if the performance cost is acceptable
+  |
+3 |     drop(v.clone());
+  |           ++++++++
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0382`.

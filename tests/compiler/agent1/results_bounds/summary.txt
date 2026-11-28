@@ -1,0 +1,15 @@
+PASS    alias_extent                 strict    rc=1 diagnostic asserted
+PASS    alias_extent                 default   rc=1 diagnostic asserted
+PASS    cast_extent                  strict    rc=1 diagnostic asserted
+PASS    cast_extent                  default   rc=1 diagnostic asserted
+PASS    call_conflict                strict    rc=1 diagnostic asserted
+PASS    call_conflict                default   rc=0 accepted with warnings only
+PASS    heap_factory                 strict    rc=1 diagnostic asserted
+PASS    heap_factory                 default   rc=1 diagnostic asserted
+PASS    mandatory_malloc1            strict    rc=1 diagnostic asserted
+PASS    mandatory_malloc1            default   rc=1 diagnostic asserted
+PASS    safe_alias                   runtime   rc=0 stdout='7'
+PASS    safe_cast                    runtime   rc=0 stdout='3'
+PASS    safe_factory                 runtime   rc=0 stdout='5'
+
+TOTAL 13  PASS 13  FAIL 0

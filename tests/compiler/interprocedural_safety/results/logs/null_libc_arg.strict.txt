@@ -1,0 +1,7 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_libc_arg.c
+returncode: 1
+timed_out: False
+
+<SRC>:3:39: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to memcpy
+  int main(void){ char a[8]; char *q=0; memcpy(a,q,4); return a[0]; }
+                                        ^~~~~~

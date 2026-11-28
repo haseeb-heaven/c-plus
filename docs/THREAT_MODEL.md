@@ -53,10 +53,10 @@ No runtime failure is allowed to continue execution with corrupted state.
 
 - **Raw `malloc`/`free` is unsafe.** C+ managed allocations detect
   double/invalid release, but a raw dangling pointer dereference is not
-  checked. ASan is broken on this host.
+  checked. Apple clang 16 ASan is broken; opt-in ASan works with Homebrew clang 23.
 - **Missing null terminators are not detected.** String buffer sizing is the
   programmer's responsibility.
-- **Use-after-free is not detected.** ASan is broken on this host; enabling it
+- **Use-after-free is not detected.** Apple clang 16 ASan is broken; opt-in ASan works with Homebrew clang 23; enabling it
   would abort inside its own runtime. A stale pointer whose address was reused
   may be misattributed.
 - **Arbitrary pointer arithmetic** (`p + i`, casts, raw `malloc` pointers) is
@@ -75,16 +75,16 @@ No runtime failure is allowed to continue execution with corrupted state.
 
 ## Evidence
 
-Executable evidence lives in `tests/` and `demos/`:
+Executable evidence lives in `tests/` and `apps/legacy_demos/`:
 
 - positive: `tests/cases/` (ordinary C, RAII order, classes, C ABI, managed
   allocations, `.len`, `print`/`scan`, constructors/destructors);
 - compile-fail: `tests/compile_fail/` (copies, escapes, borrows, constant and
   loop bounds, invalid constructors);
 - runtime-fail: `tests/runtime_fail/` (bounds, null, double release);
-- demos: `demos/A`–`L`, including networking and pthread mutex RAII.
+- demos: `apps/legacy_demos/A`–`L`, including networking and pthread mutex RAII.
 
-`./tests/run_tests.sh`, `./demos/run_demos.sh` and `ctest` are the
+`./tests/run_tests.sh`, `./apps/legacy_demos/run_demos.sh` and `ctest` are the
 reproducible verification entry points. Passing tests are evidence for the
 listed cases, not a proof of universal safety.
 

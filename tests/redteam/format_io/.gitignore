@@ -1,0 +1,9 @@
+# Harness-generated artifacts. scenarios.log is intentionally gitignored;
+# digest.txt is a committed artifact (the exact SHA-256 of scenarios.log).
+scenarios.log
+summary.txt
+stdout_sink.txt
+stderr.log
+build.log
+*.bin
+*.bin.dSYM/

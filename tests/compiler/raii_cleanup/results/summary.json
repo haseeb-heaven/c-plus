@@ -1,0 +1,604 @@
+{
+  "generated": "2026-11-25T23:21:52.223971+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/tmp/resolve3/build/c+",
+  "results": [
+    {
+      "case": "neg_multi_declarator",
+      "status": "PASS",
+      "expected": "declare one owning resource per statement",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp:9:24: error: declare one owning resource per statement\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_goto_out_of_scope",
+      "status": "PASS",
+      "expected": "goto' bypasses C+ cleanup",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp:9:28: error: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_goto_into_scope",
+      "status": "PASS",
+      "expected": "goto' bypasses C+ cleanup",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp:9:32: warning: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_setjmp_assignment",
+      "status": "PASS",
+      "expected": "setjmp' bypasses C+ deterministic cleanup",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp:7:23: warning: [CPLUS-FFI] 'setjmp' bypasses C+ deterministic cleanup\n  int main(void){ int j=setjmp(jb); if(j==0){ R x={1}; longjmp(jb,1); } printf(\"L\\n\"); return 0; }\n                        ^~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp:7:54: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n  int main(void){ int j=setjmp(jb); if(j==0){ R x={1}; longjmp(jb,1); } printf(\"L\\n\"); return 0; }\n                                                       ^~~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp:11:54: error: longjmp bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_longjmp_from_callback",
+      "status": "PASS",
+      "expected": "longjmp' bypasses C+ deterministic cleanup",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:7:27: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n  static void escape(void){ longjmp(jb,1); }\n                            ^~~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:8:20: warning: [CPLUS-FFI] 'setjmp' bypasses C+ deterministic cleanup\n  int main(void){ if(setjmp(jb)==0){ R x={1}; escape(); } printf(\"A\\n\"); return 0; }\n                     ^~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:12:20: error: 'setjmp' protects a C+ owner whose destructor would be skipped by a longjmp\nhelp: declare owners outside the protected region, or use structured control flow\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:12:45: error: longjmp bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_shadow_order",
+      "status": "PASS",
+      "expected": "D2 END\nD1 ",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_shadow_order.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_shadow_order.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_shadow_order.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_shadow_order.bin"
+          ],
+          "rc": 0,
+          "stdout": "D2 END\nD1 ",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_loop_cleanup",
+      "status": "PASS",
+      "expected": "D1 D2 D3 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_loop_cleanup.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_loop_cleanup.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_loop_cleanup.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_loop_cleanup.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 D2 D3 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_switch_break",
+      "status": "PASS",
+      "expected": "D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_switch_break.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_switch_break.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_switch_break.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_switch_break.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_return_order",
+      "status": "PASS",
+      "expected": "D2 D1 ",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_return_order.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_return_order.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_return_order.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_return_order.bin"
+          ],
+          "rc": 0,
+          "stdout": "D2 D1 ",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_move_transfer",
+      "status": "PASS",
+      "expected": "END\nD1 ",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_move_transfer.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_move_transfer.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_move_transfer.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_move_transfer.bin"
+          ],
+          "rc": 0,
+          "stdout": "END\nD1 ",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_continue_cleanup",
+      "status": "PASS",
+      "expected": "D1 B2 D2 ",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_continue_cleanup.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_continue_cleanup.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_continue_cleanup.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_continue_cleanup.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 B2 D2 ",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_explicit_helper_drop",
+      "status": "PASS",
+      "expected": "D1 D2 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_explicit_helper_drop.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_explicit_helper_drop.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_explicit_helper_drop.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_explicit_helper_drop.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 D2 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_separate_declarations",
+      "status": "PASS",
+      "expected": "END\nD2 D1 ",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_separate_declarations.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_separate_declarations.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_separate_declarations.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_separate_declarations.bin"
+          ],
+          "rc": 0,
+          "stdout": "END\nD2 D1 ",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_chain_01",
+      "status": "PASS",
+      "expected": "D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_01.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_01.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_01.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_01.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_chain_02",
+      "status": "PASS",
+      "expected": "D2 D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_02.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_02.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_02.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_02.bin"
+          ],
+          "rc": 0,
+          "stdout": "D2 D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_chain_04",
+      "status": "PASS",
+      "expected": "D4 D3 D2 D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_04.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_04.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_04.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_04.bin"
+          ],
+          "rc": 0,
+          "stdout": "D4 D3 D2 D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_chain_08",
+      "status": "PASS",
+      "expected": "D8 D7 D6 D5 D4 D3 D2 D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_08.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_08.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_08.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_08.bin"
+          ],
+          "rc": 0,
+          "stdout": "D8 D7 D6 D5 D4 D3 D2 D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_chain_16",
+      "status": "PASS",
+      "expected": "D16 D15 D14 D13 D12 D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_16.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_16.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_16.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_16.bin"
+          ],
+          "rc": 0,
+          "stdout": "D16 D15 D14 D13 D12 D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_branch_01",
+      "status": "PASS",
+      "expected": "D1 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_01.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_01.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_01.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_01.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_branch_03",
+      "status": "PASS",
+      "expected": "D1 D2 D3 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_03.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_03.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_03.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_03.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 D2 D3 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "fuzz_branch_07",
+      "status": "PASS",
+      "expected": "D1 D2 D3 D4 D5 D6 D7 END\n",
+      "steps": [
+        {
+          "command": [
+            "/tmp/resolve3/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_07.cp",
+            "-o",
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_07.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_07.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_07.bin"
+          ],
+          "rc": 0,
+          "stdout": "D1 D2 D3 D4 D5 D6 D7 END\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

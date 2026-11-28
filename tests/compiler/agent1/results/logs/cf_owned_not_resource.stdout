@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_owned_not_resource.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/owned_not_resource.c:4:11: error: 'owned' requires a resource type, but 'int' is not a resource

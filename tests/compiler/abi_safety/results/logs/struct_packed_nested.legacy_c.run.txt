@@ -1,0 +1,11 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+packed=13,0,1,5
+outer=16,0,4,12,4,8
+arr=24,0,4,16
+
+--- stderr ---
+

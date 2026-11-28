@@ -1,0 +1,29 @@
+Optimized-build native trap proof (--sanitize=none)
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+bounds_o2        default_O0  -O0  expected=134 got=build_rc=1 diag=C+ error: index 7 status=PASS_STATIC_REJECT
+bounds_o2        default_O2  -O2  expected=134 got=build_rc=1 diag=C+ error: index 7 status=PASS_STATIC_REJECT
+bounds_o2        default_O3  -O3  expected=134 got=build_rc=1 diag=C+ error: index 7 status=PASS_STATIC_REJECT
+bounds_o2        strict_O2   -O2  expected=134 got=build_rc=1 diag=C+ error: index 7 status=PASS_STATIC_REJECT
+overflow_o2      default_O0  -O0  expected=110 got=110 diag=signed integer overflow status=PASS
+overflow_o2      default_O2  -O2  expected=110 got=110 diag=signed integer overflow status=PASS
+overflow_o2      default_O3  -O3  expected=110 got=110 diag=signed integer overflow status=PASS
+overflow_o2      strict_O2   -O2  expected=110 got=110 diag=signed integer overflow status=PASS
+divzero_o2       default_O0  -O0  expected=110 got=110 diag=division by zero status=PASS
+divzero_o2       default_O2  -O2  expected=110 got=110 diag=division by zero status=PASS
+divzero_o2       default_O3  -O3  expected=110 got=110 diag=division by zero status=PASS
+divzero_o2       strict_O2   -O2  expected=110 got=build_rc=1 diag=division by zero status=PASS_STATIC_REJECT
+shift_o2         default_O0  -O0  expected=110 got=110 diag=shift count status=PASS
+shift_o2         default_O2  -O2  expected=110 got=110 diag=shift count status=PASS
+shift_o2         default_O3  -O3  expected=110 got=110 diag=shift count status=PASS
+shift_o2         strict_O2   -O2  expected=110 got=build_rc=1 diag=shift count status=PASS_STATIC_REJECT
+null_o2          default_O0  -O0  expected=102 got=102 diag=null pointer dereference status=PASS
+null_o2          default_O2  -O2  expected=102 got=102 diag=null pointer dereference status=PASS
+null_o2          default_O3  -O3  expected=102 got=102 diag=null pointer dereference status=PASS
+null_o2          strict_O2   -O2  expected=102 got=build_rc=1 diag=null pointer dereference status=PASS_STATIC_REJECT
+double_free_o2   default_O0  -O0  expected=104 got=build_rc=1 diag=double free status=PASS_STATIC_REJECT
+double_free_o2   default_O2  -O2  expected=104 got=build_rc=1 diag=double free status=PASS_STATIC_REJECT
+double_free_o2   default_O3  -O3  expected=104 got=build_rc=1 diag=double free status=PASS_STATIC_REJECT
+double_free_o2   strict_O2   -O2  expected=104 got=build_rc=1 diag=double free status=PASS_STATIC_REJECT
+
+failures: 0

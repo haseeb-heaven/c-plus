@@ -1,0 +1,2 @@
+GUI_REFUSED tag=render:0,0,0 category=1 code=108 message=render: missing or invalid arguments
+GUI_RESULT render:0,0,0 REFUSED 108

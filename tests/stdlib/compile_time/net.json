@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "suite": "stdlib/net.hp compile-time safety",
+  "directory": "tests/stdlib/compile_time",
+  "date": "2026-11-23",
+  "environment": {
+    "compiler": "./build/c+",
+    "c_backend": "CPLUS_CLANG=/usr/bin/clang",
+    "note": "The installed ~/.local/bin/c+ carries a broken macOS SDK sysroot (arpa/inet.h not found); all results below use the repository's own build/c+ with the SDK-aware /usr/bin/clang backend, as required by tests/integration/README.md."
+  },
+  "commands": {
+    "check": "./build/c+ check --strict <file>",
+    "build": "./build/c+ build --strict --sanitize=none <file> -o /tmp/ct_net_probe"
+  },
+  "diagnostic_policy": {
+    "counted": "Only [CPLUS-...]-prefixed lines are counted as authoritative tagged C+ contract diagnostics; clang sysroot/warning and linker noise is not counted.",
+    "untagged_cplus_diagnostics": "The RAII lowering pass emits genuine C+ semantic errors without a [CPLUS-] prefix. These are recorded verbatim with tagged=false; they are the same diagnostic form the project already treats as a compile-time rejection in tests/compile_fail/use_after_move.c."
+  },
+  "cases": [
+    {
+      "file": "net_use_after_close.cp",
+      "scenario": "connection::read() called after an explicit drop()",
+      "expect": "RUNTIME",
+      "observed": "RUNTIME",
+      "check_exit": 0,
+      "build_exit": 0,
+      "cplus_diagnostics": [],
+      "gap": true,
+      "notes": "Not provable at compile time. The C+ analyzer does not track explicit drop() state on class handles; neither command emits any [CPLUS-] diagnostic. net.hp neutralises the effect at run time because drop() sets fd=-1 and owns=0, so is_valid() is false and read() returns STDLIB_FAIL. Gap recorded below."
+    },
+    {
+      "file": "net_double_close.cp",
+      "scenario": "connection::drop() called twice on the same handle",
+      "expect": "RUNTIME",
+      "observed": "RUNTIME",
+      "check_exit": 0,
+      "build_exit": 0,
+      "cplus_diagnostics": [],
+      "gap": true,
+      "notes": "Not provable at compile time. class drop() is lowered to a plain method call, unlike cplus_release()/managed pointers which do trigger [CPLUS-OWNER] double free of '<var>' (see tests/compile_fail/double_release.c). No [CPLUS-] diagnostic is emitted. net.hp makes the second drop() inert (fd=-1, owns=0), so no descriptor is closed twice at run time. Gap recorded below."
+    },
+    {
+      "file": "net_use_after_transfer.cp",
+      "scenario": "moved-from connection reused after cplus_move() transferred ownership",
+      "expect": "REJECT",
+      "observed": "REJECT",
+      "check_exit": 1,
+      "build_exit": 1,
+      "cplus_diagnostics": [
+        {
+          "tagged": false,
+          "level": "error",
+          "location": "net_use_after_transfer.cp:15:28",
+          "message": "use-after-move: use of moved-from resource 'a'",
+          "help": "the handle was zeroed by cplus_move",
+          "source": "C+ RAII lowering / use-after-move pass"
+        }
+      ],
+      "gap": false,
+      "notes": "The only case in this set that is rejected at compile time. Both check --strict and build --strict --sanitize=none fail with the same C+ use-after-move diagnostic and produce no executable. A tracked-borrow variant (connection *view = &a; cplus_move(a); view->descriptor();) was also probed and rejected with \"borrow 'view' of 'a' is used after that resource was moved\" / \"re-borrow the new owner instead\". Both rejection messages are untagged; if a downstream harness requires a literal [CPLUS-] prefix to count a rejection, this case would need reclassification (see GAP-NET-03)."
+    },
+    {
+      "file": "net_valid.cp",
+      "scenario": "positive control: live connection I/O then single drop()",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "check_exit": 0,
+      "build_exit": 0,
+      "cplus_diagnostics": [],
+      "gap": false,
+      "notes": "Accepted by both commands; compile-only borrow handle, no socket bound."
+    },
+    {
+      "file": "net_valid_borrow.cp",
+      "scenario": "positive control: listener_borrow/connection_borrow and a borrow used before release",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "check_exit": 0,
+      "build_exit": 0,
+      "cplus_diagnostics": [],
+      "gap": false,
+      "notes": "Accepted by both commands; the tracked borrow 'view' is dereferenced only before drop(), so it exercises the borrow checker without tripping it. No socket bound."
+    }
+  ],
+  "gaps": [
+    {
+      "id": "GAP-NET-01",
+      "kind": "RUNTIME",
+      "case": "net_use_after_close.cp",
+      "missing_capability": "Compile-time flow tracking of explicit drop() state on stdlib/net.hp class handles (connection/listener).",
+      "compiler_behavior": "c+ check --strict and c+ build --strict --sanitize=none both accept the use-after-close; no [CPLUS-] diagnostic.",
+      "runtime_mitigation": "drop() sets fd=-1 and owns=0, so is_valid() is false and subsequent read/write/bound_port/accept fail safely instead of touching a closed descriptor."
+    },
+    {
+      "id": "GAP-NET-02",
+      "kind": "RUNTIME",
+      "case": "net_double_close.cp",
+      "missing_capability": "Compile-time recognition of a second class drop() as a double release (the [CPLUS-OWNER] double-free analysis only covers cplus_release()/managed pointers).",
+      "compiler_behavior": "c+ check --strict and c+ build --strict --sanitize=none both accept the double drop(); no [CPLUS-] diagnostic.",
+      "runtime_mitigation": "The second drop() sees owns=0 and fd=-1 and performs no close(); the RAII scope-exit drop is likewise inert."
+    },
+    {
+      "id": "GAP-NET-03",
+      "kind": "COVERAGE-NOTE",
+      "case": "net_use_after_transfer.cp",
+      "missing_capability": "Tagged [CPLUS-] diagnostic for use-after-transfer rejections; the RAII/use-after-move passes report them untagged.",
+      "compiler_behavior": "Rejection is real and reproducible (exit 1 from both commands) for both direct moved-from reuse ('use-after-move: use of moved-from resource') and tracked-borrow reuse ('borrow ... is used after that resource was moved'), but neither message carries a [CPLUS-] prefix.",
+      "runtime_mitigation": "N/A - already rejected at compile time; this note only qualifies the diagnostic-counting rule."
+    }
+  ],
+  "summary": {
+    "total_cases": 5,
+    "accept": 2,
+    "reject_expected": 1,
+    "reject_tagged": 0,
+    "partial_untagged_reject": 1,
+    "runtime": 2,
+    "tagged_cplus_diagnostics_observed": 0,
+    "classification_note": "net_use_after_transfer.cp is genuinely rejected by C+ (exit 1 both commands) but its diagnostic is untagged. Under the suite rule that only [CPLUS- diagnostics count as enforcement it is PARTIAL, not a tagged REJECT. This summary intentionally does not report reject:1 without the untagged qualifier.",
+    "gap_ids": ["GAP-NET-01", "GAP-NET-02", "GAP-NET-03"]
+  }
+}

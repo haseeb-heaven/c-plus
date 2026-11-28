@@ -1,0 +1,63 @@
+/* C+ adapter: Nuklear (MIT, vendored third_party/nuklear) on the scoped-memory-style
+ * VM data stack. Additive header; no Nuklear source edited.
+ *
+ * Nuklear's nk_allocator callbacks are redirected to stdlib_datastack_alloc;
+ * free() is intentionally a no-op because all allocations die when the
+ * enclosing stdlib_scratch_scope is dropped (one store restores top).
+ *
+ * Caveat: this is safe only for short-lived UI frames whose context is rebuilt
+ * after scope rewind. Do not keep a context across scope drops; refs are stale.
+ */
+#ifndef CPLUS_STD_NUKLEAR_ADAPT_HP
+#define CPLUS_STD_NUKLEAR_ADAPT_HP
+
+#include <stddef.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+#include "stdlib/datastack.hp"
+#include "nuklear.h"
+
+/* nk_plugin_alloc: allocate size bytes from the supplied data stack. */
+static void *nuklear_scratch_alloc(nk_handle userdata, void *old_ptr,
+                                   nk_size size) {
+    (void)old_ptr;
+    error e = error();
+    stdlib_datastack *ds = (stdlib_datastack *)userdata.ptr;
+    void *p;
+    /* Never touch the process-wide stdlib error callback here: an allocator
+     * adapter has no business replacing the host application's handler.
+     * Failure details belong in the per-call `error` passed below, not in
+     * global state. */
+    if (ds == (stdlib_datastack *)0 || size == 0u)
+        return (void *)0;
+    p = stdlib_datastack_alloc(ds, (size_t)size, 16u, &e);
+    return p;
+}
+
+/* nk_plugin_free: no-op; the scratch scope reclaims all bytes at once. */
+static void nuklear_scratch_free(nk_handle userdata, void *ptr) {
+    (void)userdata; (void)ptr;
+}
+
+/* Fill an nk_allocator for a caller-owned Nuklear context. */
+static void nuklear_scratch_allocator(struct nk_allocator *out,
+                                      stdlib_datastack *ds) {
+    if (out == (struct nk_allocator *)0)
+        return;
+    out->userdata.ptr = (void *)ds;
+    out->alloc = &nuklear_scratch_alloc;
+    out->free = &nuklear_scratch_free;
+}
+
+/* Initialize a Nuklear context against the scratch allocator.
+ * Returns nk_init()'s result; 0/false means Nuklear refused the context. */
+static nk_bool nuklear_scratch_init(struct nk_context *ctx,
+                                    stdlib_datastack *ds,
+                                    const struct nk_user_font *font) {
+    struct nk_allocator a;
+    nuklear_scratch_allocator(&a, ds);
+    return nk_init(ctx, &a, font);
+}
+
+#endif /* CPLUS_STD_NUKLEAR_ADAPT_HP */

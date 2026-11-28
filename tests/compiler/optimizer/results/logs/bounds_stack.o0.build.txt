@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/cases/bounds_stack.c -O0 --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/emitted/bounds_stack.o0.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/bounds_stack.o0.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

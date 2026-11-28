@@ -1,0 +1,2 @@
+clang: warning: -lyyjson: 'linker' input unused [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-Lbuild/ext' [-Wunused-command-line-argument]

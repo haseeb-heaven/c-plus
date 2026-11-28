@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug36_const_cast.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug36_const_cast.c:3:57: error: [CPLUS-FFI] casting away const and writing to the original object is undefined

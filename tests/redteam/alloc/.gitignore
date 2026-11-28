@@ -1,0 +1,4 @@
+# Generated run artifacts (results are reproducible from the generator + harness).
+results/
+*.stdout
+*.stderr

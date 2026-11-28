@@ -1,0 +1,454 @@
+/* C+ modern standard library: scoped thread-local DataStack (scratch bump stack).
+ *
+ * MODERN LAYER ONLY.  Each thread gets one scratch stack (a single __thread
+ * variable defined in libc/src/stdlib/datastack_tls.c).  Entering a scope
+ * records saved_top; leaving restores it in one store.  Containers using the
+ * scratch allocator skip individual frees.  `realloc` detects a top-of-stack
+ * block and grows in place with zero copying.
+ *
+ * Backing storage is a configurable large buffer reserved from the checked
+ * heap (one allocation per thread, grown on demand).  A future port can swap
+ * this for mmap/VirtualAlloc reservations without changing the API.
+ */
+#ifndef CPLUS_STD_DATASTACK_HP
+#define CPLUS_STD_DATASTACK_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <sys/mman.h>
+#  include <unistd.h>
+#endif
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+#include "stdlib/view_lifetime.hp"
+
+/* the inspiration language-inspired: a data stack is a large reserved address region with a
+ * single bump pointer.  `backing` selects virtual memory (mmap/VirtualAlloc,
+ * committed on demand) or a plain checked-heap buffer (fallback / Windows
+ * without VirtualAlloc).  Memory is freed at scope exit with one store. */
+#ifndef STDLIB_DATASTACK_RESERVE
+#define STDLIB_DATASTACK_RESERVE ((size_t)256u * 1024u * 1024u)
+#endif
+#ifndef STDLIB_DATASTACK_COMMIT
+#define STDLIB_DATASTACK_COMMIT ((size_t)1024u * 1024u)
+#endif
+
+/* Debug poison policy.  A rewound bump region is filled with 0xDD so a stale
+ * reference fails on its first read; release builds keep the exact one-store
+ * rewind.  This changes no C struct field, size or alignment. */
+#if defined(STDLIB_DATASTACK_NO_POISON)
+#define STDLIB_DATASTACK_POISON 0
+#elif defined(STDLIB_DATASTACK_FORCE_POISON)
+#define STDLIB_DATASTACK_POISON 1
+#elif defined(NDEBUG)
+#define STDLIB_DATASTACK_POISON 0
+#else
+#define STDLIB_DATASTACK_POISON 1
+#endif
+#define STDLIB_DATASTACK_POISON_BYTE ((unsigned char)0xDDu)
+
+/* Every bump allocation occupies a whole number of 16-byte slots.  Keeping
+ * top on that grid means each returned pointer is 16-byte aligned regardless
+ * of the requested size or the caller's smaller alignment request, which is
+ * required for SIMD and over-aligned struct storage. */
+static inline size_t stdlib_datastack_slot(size_t n) {
+    return (n + (size_t)STDLIB_ALIGN_DEFAULT - 1u) &
+           ~((size_t)STDLIB_ALIGN_DEFAULT - 1u);
+}
+
+static inline int stdlib_datastack_poison_enabled(void) {
+    return STDLIB_DATASTACK_POISON;
+}
+
+/* Poison the half-open byte range between the two pointers (either order).
+ * No-op in release builds. */
+static inline void stdlib_datastack_poison(unsigned char *a, unsigned char *b) {
+#if STDLIB_DATASTACK_POISON
+    unsigned char *lo = a < b ? a : b;
+    unsigned char *hi = a < b ? b : a;
+    if (lo != (unsigned char *)0 && hi != (unsigned char *)0 && hi > lo)
+        memset(lo, (int)STDLIB_DATASTACK_POISON_BYTE, (size_t)(hi - lo));
+#else
+    (void)a; (void)b;
+#endif
+}
+
+/* Core-memory audit C2: a rewind hands the same addresses back out.  Retire
+ * every view published inside the rewound half-open range before the bump
+ * pointer moves, matching the arena reset pattern.  Retiring only these bytes
+ * (not the whole backing region) keeps views from enclosing, still-live
+ * scopes valid.  The registry stores addresses for identity only and never
+ * dereferences them, so this is safe over poisoned/uncommitted bytes too. */
+static inline void stdlib_datastack_retire_rewound(const unsigned char *lo,
+                                                   const unsigned char *hi) {
+    if (lo == (const unsigned char *)0 || hi <= lo) return;
+    stdlib_view_retire_range((const void *)lo, (size_t)(hi - lo));
+}
+
+typedef struct stdlib_datastack {
+    unsigned char *base;
+    unsigned char *top;
+    size_t capacity;   /* reserved bytes (VM) or allocated bytes (heap) */
+    size_t committed;  /* VM: bytes currently READWRITE; heap: == capacity */
+    uint64_t generation;
+    int backing;       /* 0 = heap buffer, 1 = virtual memory */
+    size_t page;       /* VM page size / commit granularity */
+} stdlib_datastack;
+
+/* Defined once in libc/src/stdlib/datastack_tls.c. */
+extern __thread stdlib_datastack stdlib_tls_datastack;
+
+typedef struct stdlib_scratch_mark {
+    unsigned char *saved_top;
+    uint64_t generation;
+} stdlib_scratch_mark;
+
+/* Weak definition: one shared counter per program, even across translation
+ * units.  A TU-local static let a second TU reissue a generation already
+ * handed out in the first TU, so a stale mark could be accepted after a
+ * cross-TU reset/destroy.  Merged by the linker exactly like stdlib_state
+ * in error.hp and the view registry in view_lifetime.hp. */
+__attribute__((weak)) uint64_t stdlib_datastack_generation_counter = 1;
+
+static inline uint64_t stdlib_datastack_next_gen(void) {
+    uint64_t v;
+    do {
+        v = __atomic_fetch_add(&stdlib_datastack_generation_counter, 1u,
+                               __ATOMIC_RELAXED);
+    } while (v == 0);
+    return v;
+}
+
+static inline size_t stdlib_datastack_page_size(void) {
+#if defined(_WIN32)
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return (size_t)si.dwPageSize;
+#else
+    long ps = sysconf(_SC_PAGESIZE);
+    return ps > 0 ? (size_t)ps : 4096u;
+#endif
+}
+
+/* Reserve a large virtual region with no committed pages.  Growth commits in
+ * STDLIB_DATASTACK_COMMIT chunks via mprotect/VirtualProtect; nothing is
+ * resident until touched.  Returns STDLIB_FAIL and leaves ds untouched if the
+ * platform cannot reserve. */
+static inline int stdlib_datastack_init_vm(stdlib_datastack *ds, size_t reserve,
+                                           error *err) {
+    size_t page = stdlib_datastack_page_size();
+    error_reset(err);
+    if (ds == 0 || reserve == 0 || page == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid VM config"), STDLIB_FAIL;
+#if defined(_WIN32)
+    {
+        unsigned char *p = (unsigned char *)VirtualAlloc(0, reserve,
+                                                         MEM_RESERVE, PAGE_NOACCESS);
+        if (p == 0)
+            return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                                  CPLUS_EXIT_RESOURCE, "datastack: VirtualAlloc reserve refused"), STDLIB_FAIL;
+        ds->base = p;
+    }
+#else
+    {
+        void *p = mmap(0, reserve, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        /* Compare as integers: MAP_FAILED is (void *)-1, and forging that
+         * integer as a pointer has no verifiable provenance. */
+        if ((uintptr_t)p == (uintptr_t)-1)
+            return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                                  CPLUS_EXIT_RESOURCE, "datastack: mmap reserve refused"), STDLIB_FAIL;
+        ds->base = (unsigned char *)p;
+    }
+#endif
+    ds->top = ds->base;
+    ds->capacity = reserve;
+    ds->committed = 0;
+    ds->generation = stdlib_datastack_next_gen();
+    ds->backing = 1;
+    ds->page = page;
+    return STDLIB_OK;
+}
+
+/* Commit [committed, need) rounded to page size. */
+static inline int stdlib_datastack_commit(stdlib_datastack *ds, size_t need,
+                                          error *err) {
+    size_t target;
+    error_reset(err);
+    if (ds == 0 || ds->backing != 1 || need <= ds->committed) return STDLIB_OK;
+    if (need > ds->capacity)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "datastack: reserve exhausted"), STDLIB_FAIL;
+    target = (need + ds->page - 1u) & ~(ds->page - 1u);
+    if (target > ds->capacity) target = ds->capacity;
+#if defined(_WIN32)
+    if (VirtualAlloc(ds->base + ds->committed, target - ds->committed,
+                     MEM_COMMIT, PAGE_READWRITE) == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE, "datastack: VirtualAlloc commit refused"), STDLIB_FAIL;
+#else
+    if (mprotect(ds->base + ds->committed, target - ds->committed,
+                 PROT_READ | PROT_WRITE) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE, "datastack: mprotect commit refused"), STDLIB_FAIL;
+#endif
+    ds->committed = target;
+    return STDLIB_OK;
+}
+
+/* Heap-buffer fallback (also used when VM reservation is unavailable). */
+static inline int stdlib_datastack_init(stdlib_datastack *ds, size_t capacity,
+                                        error *err) {
+    error_reset(err);
+    if (ds == 0 || capacity == 0 || capacity > (size_t)-1 / 2u)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid config"), STDLIB_FAIL;
+    /* cplus_alloc calls cplus_print_fatal (process exit) when malloc refuses
+     * a request.  Refuse anything above the checked allocator's documented
+     * practical ceiling first so a huge-but-non-overflowing request stays a
+     * recoverable STDLIB_FAIL with a category/code instead of an abort. */
+    if (capacity > STDLIB_ALLOC_LIMIT)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS,
+                              "datastack: capacity exceeds STDLIB_ALLOC_LIMIT"), STDLIB_FAIL;
+    ds->base = (unsigned char *)cplus_alloc(capacity);
+    if (ds->base == (unsigned char *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE, "datastack: reserve refused"), STDLIB_FAIL;
+    ds->top = ds->base;
+    ds->capacity = capacity;
+    ds->committed = capacity;
+    ds->generation = stdlib_datastack_next_gen();
+    ds->backing = 0;
+    ds->page = stdlib_datastack_page_size();
+    return STDLIB_OK;
+}
+
+static inline void stdlib_datastack_destroy(stdlib_datastack *ds, error *err) {
+    error_reset(err);
+    if (ds == 0 || ds->base == 0) return;
+    if (ds->backing == 1) {
+#if defined(_WIN32)
+        (void)VirtualFree(ds->base, 0, MEM_RELEASE);
+#else
+        (void)munmap(ds->base, ds->capacity);
+#endif
+    } else {
+        cplus_release(ds->base);
+    }
+    ds->base = 0; ds->top = 0; ds->capacity = 0; ds->committed = 0;
+    ds->generation = stdlib_datastack_next_gen();
+}
+
+/* Commit-on-demand wrapper used by the bump allocator. */
+static inline int stdlib_datastack_ensure(stdlib_datastack *ds, size_t need,
+                                          error *err) {
+    if (ds == 0 || ds->backing != 1) return STDLIB_OK;
+    return stdlib_datastack_commit(ds, need, err);
+}
+
+/* Return the calling thread's scratch stack, lazily initialised. */
+static inline stdlib_datastack *stdlib_thread_datastack(error *err) {
+    if (stdlib_tls_datastack.base == (unsigned char *)0) {
+        /* Prefer a VM reservation; fall back to a checked-heap buffer. */
+        if (stdlib_datastack_init_vm(&stdlib_tls_datastack,
+                                    STDLIB_DATASTACK_RESERVE, err) != STDLIB_OK &&
+            stdlib_datastack_init(&stdlib_tls_datastack, 1u << 20u, err) != STDLIB_OK)
+            return (stdlib_datastack *)0;
+    }
+    return &stdlib_tls_datastack;
+}
+
+static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds) {
+    stdlib_scratch_mark m;
+    m.saved_top = (unsigned char *)0;
+    m.generation = 0;
+    if (ds == 0) return m;
+    m.saved_top = ds->top;
+    m.generation = ds->generation;
+    return m;
+}
+
+static inline void stdlib_scratch_leave(stdlib_datastack *ds,
+                                        stdlib_scratch_mark m) {
+    if (ds == 0 || m.generation != ds->generation) return; /* stale/NULL: refuse */
+    stdlib_datastack_retire_rewound(m.saved_top, ds->top);
+    stdlib_datastack_poison(m.saved_top, ds->top);
+    ds->top = m.saved_top;
+    /* Do NOT bump generation here: nested scopes must remain valid.  The
+     * generation changes on reset/destroy, which is what invalidates marks. */
+}
+
+static inline void *stdlib_datastack_alloc(stdlib_datastack *ds, size_t n,
+                                           size_t align, error *err) {
+    uintptr_t p, mask;
+    size_t pad, slots;
+    error_reset(err);
+    if (ds == 0 || ds->base == 0 || n == 0 || align == 0 ||
+        (align & (align - 1u)) != 0 ||
+        n > (size_t)-1 - (size_t)STDLIB_ALIGN_DEFAULT)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid request"), (void *)0;
+    slots = stdlib_datastack_slot(n);
+    if (align < (size_t)STDLIB_ALIGN_DEFAULT) align = (size_t)STDLIB_ALIGN_DEFAULT;
+    mask = (uintptr_t)align - 1u;
+    p = (uintptr_t)ds->top;
+    pad = (size_t)((align - (p & mask)) & mask);
+    if (pad > (size_t)(ds->base + ds->capacity - ds->top) ||
+        slots > (size_t)(ds->base + ds->capacity - ds->top) - pad)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "datastack: exhausted"), (void *)0;
+    /* scoped-memory-style: commit only the pages touched by this bump. */
+    if (stdlib_datastack_ensure(ds, (size_t)(p + pad + slots - (uintptr_t)ds->base), err) != STDLIB_OK)
+        return (void *)0;
+    {
+        void *out = (void *)(ds->top + pad);
+        ds->top += pad + slots;
+        memset(out, 0, slots);
+        return out;
+    }
+}
+
+static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
+                                             size_t old_size, size_t new_size,
+                                             size_t align, error *err) {
+    unsigned char *top;
+    void *fresh;
+    size_t old_slots, new_slots;
+    error_reset(err);
+    if (ds == 0 || ds->base == (unsigned char *)0 || new_size == 0 ||
+        old_size > (size_t)-1 - (size_t)STDLIB_ALIGN_DEFAULT ||
+        new_size > (size_t)-1 - (size_t)STDLIB_ALIGN_DEFAULT)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid realloc"), (void *)0;
+    old_slots = stdlib_datastack_slot(old_size);
+    new_slots = stdlib_datastack_slot(new_size);
+    /* Issue #218: old_size must be backed by bytes already bumped, otherwise
+     * top - old_size underflows and the copy reads past the live region (into
+     * the freshly allocated block itself). */
+    {
+        uintptr_t p = (uintptr_t)ptr;
+        uintptr_t base = (uintptr_t)ds->base;
+        uintptr_t cur = (uintptr_t)ds->top;
+        if (p < base || p > cur || old_size > ds->capacity ||
+            old_slots > (size_t)(cur - p))
+            return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                                  CPLUS_EXIT_BOUNDS, "datastack: implausible realloc"),
+                   (void *)0;
+    }
+    top = ds->top - old_slots;
+    if (ptr != (void *)top) {
+        fresh = stdlib_datastack_alloc(ds, new_size, align, err);
+        if (fresh == (void *)0) return (void *)0;
+        if (ptr != 0 && old_size != 0) memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
+        return fresh;
+    }
+    if (new_slots > old_slots) {
+        size_t extra = new_slots - old_slots;
+        if (extra > (size_t)(ds->base + ds->capacity - ds->top)) {
+            fresh = stdlib_datastack_alloc(ds, new_size, align, err);
+            if (fresh == 0) return 0;
+            memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
+            return fresh;
+        }
+        /* Growing the bump pointer does not map pages: commit the newly
+         * covered region before returning, otherwise the next write faults
+         * (SIGBUS) on VM-backed stacks. */
+        if (stdlib_datastack_commit(ds,
+                (size_t)(ds->top + extra - ds->base), err) != STDLIB_OK)
+            return (void *)0;
+        ds->top += extra;
+    } else {
+        ds->top -= (old_slots - new_slots);
+    }
+    return ptr;
+}
+
+static inline void stdlib_datastack_release(stdlib_datastack *ds, void *ptr,
+                                            size_t size, error *err) {
+    error_reset(err);
+    /* Issue #218: validate before subtracting so a forged size cannot make
+     * ds->top - size point below the backing buffer. */
+    if (ds != 0 && ptr != 0 && ds->base != (unsigned char *)0) {
+        uintptr_t p = (uintptr_t)ptr;
+        uintptr_t base = (uintptr_t)ds->base;
+        uintptr_t cur = (uintptr_t)ds->top;
+        if (p >= base && p <= cur && size <= (size_t)(cur - base) &&
+            p == cur - (uintptr_t)size)
+            ds->top -= size; /* top-of-stack free is a single subtract */
+    }
+    /* invalid/non-top frees are no-ops; the checkpoint restores the region */
+}
+
+/* Vtable adapters bound to the calling thread's scratch stack. */
+static inline void *stdlib_scratch_op_alloc(void *ctx, size_t size, size_t align) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    return ds == 0 ? (void *)0 : stdlib_datastack_alloc(ds, size, align, &e);
+}
+static inline void *stdlib_scratch_op_realloc(void *ctx, void *ptr,
+                                              size_t old_size, size_t new_size,
+                                              size_t align) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    return ds == 0 ? (void *)0 : stdlib_datastack_realloc(ds, ptr, old_size, new_size, align, &e);
+}
+static inline void stdlib_scratch_op_release(void *ctx, void *ptr, size_t size) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    if (ds != 0) stdlib_datastack_release(ds, ptr, size, &e);
+}
+static inline void stdlib_scratch_op_reset(void *ctx) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    if (ds != 0) {
+        stdlib_datastack_retire_rewound(ds->base, ds->top);
+        ds->top = ds->base;
+    }
+}
+/* C+ RAII scope guard: entering saves the top, drop() restores it in one
+ * store (scoped-memory-style single-store scope free).  Nested scopes are safe. */
+class stdlib_scratch_scope {
+    stdlib_datastack *scope_ds;
+    unsigned char *scope_saved_top;
+    uint64_t scope_gen;
+
+    stdlib_scratch_scope(stdlib_datastack *stack) {
+        unsigned char *saved = (unsigned char *)0;
+        uint64_t g = 0;
+        if (stack != (stdlib_datastack *)0) {
+            saved = (*stack).top;
+            g = (*stack).generation;
+        }
+        this->scope_ds = stack;
+        this->scope_saved_top = saved;
+        this->scope_gen = g;
+    }
+
+    void drop(void) {
+        if (this->scope_ds != (stdlib_datastack *)0 && this->scope_gen == (*this->scope_ds).generation) {
+            unsigned char *top = (*this->scope_ds).top;
+            stdlib_datastack_retire_rewound(this->scope_saved_top, top);
+            stdlib_datastack_poison(this->scope_saved_top, top);
+            (*this->scope_ds).top = this->scope_saved_top;
+        }
+        this->scope_ds = (stdlib_datastack *)0;
+    }
+};
+
+static inline stdlib_allocator stdlib_scratch_allocator(void) {
+    stdlib_allocator v;
+    v.ctx = (void *)0;
+    v.alloc = stdlib_scratch_op_alloc;
+    v.realloc = stdlib_scratch_op_realloc;
+    v.release = stdlib_scratch_op_release;
+    v.reset = stdlib_scratch_op_reset;
+    return v;
+}
+
+#endif /* CPLUS_STD_DATASTACK_HP */

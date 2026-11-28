@@ -1,0 +1,87 @@
+/* C+ standard library: clocks and sleeping (POSIX clock_gettime).
+ *
+ * Portable, stateless helpers.  No type is named `time` (that is a libc
+ * function); the names are explicit about the clock and unit.
+ */
+#ifndef CPLUS_STD_TIME_HP
+#define CPLUS_STD_TIME_HP
+
+#include <errno.h>
+#include <limits.h>
+#include <time.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+static inline unsigned long long time_now_ns(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now) != 0)
+        return 0;
+    if (now.tv_sec < 0 || now.tv_nsec < 0)
+        return 0;
+    return (unsigned long long)now.tv_sec * 1000000000ULL +
+           (unsigned long long)now.tv_nsec;
+}
+
+static inline unsigned long long time_now_ms(void) {
+    return time_now_ns() / 1000000ULL;
+}
+
+/* Monotonic clock: never goes backwards, suitable for durations. */
+static inline unsigned long long time_monotonic_ns(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+        return 0;
+    if (now.tv_sec < 0 || now.tv_nsec < 0)
+        return 0;
+    return (unsigned long long)now.tv_sec * 1000000000ULL +
+           (unsigned long long)now.tv_nsec;
+}
+
+static inline unsigned long long time_monotonic_ms(void) {
+    return time_monotonic_ns() / 1000000ULL;
+}
+
+static inline void time_sleep_ms(unsigned ms) {
+    struct timespec request;
+    struct timespec rem;
+    request.tv_sec = (time_t)(ms / 1000u);
+    request.tv_nsec = (long)((ms % 1000u) * 1000000u);
+    while (nanosleep(&request, &rem) == -1 && errno == EINTR)
+        request = rem;
+}
+
+/* UTC ISO-8601; truncation is an error, never silent. */
+static inline int time_format_iso8601(unsigned long long unix_ns, char *buf,
+                                      size_t size, error *err) {
+    unsigned long long secs_u = unix_ns / 1000000000ULL;
+    time_t seconds;
+    struct tm parts;
+    error_reset(err);
+    if (buf == NULL || size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "time_format_iso8601: null buffer");
+        return STDLIB_FAIL;
+    }
+    if (secs_u > (unsigned long long)LONG_MAX) {
+        buf[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "time_format_iso8601: timestamp out of range");
+        return STDLIB_FAIL;
+    }
+    seconds = (time_t)secs_u;
+    if (gmtime_r(&seconds, &parts) == NULL) {
+        buf[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "time_format_iso8601: timestamp out of range");
+        return STDLIB_FAIL;
+    }
+    if (strftime(buf, size, "%Y-%m-%dT%H:%M:%SZ", &parts) == 0) {
+        buf[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "time_format_iso8601: buffer too small");
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+#endif

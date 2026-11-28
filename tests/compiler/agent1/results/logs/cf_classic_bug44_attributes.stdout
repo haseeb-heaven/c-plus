@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug44_attributes.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug44_attributes.c:3:3: error: [CPLUS-FFI] optimizer attributes that can lie about side effects are not supported in safe C+

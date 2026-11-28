@@ -1,0 +1,9 @@
+# Generated build artifacts: ignore binaries, archives and scratch.
+# Text evidence (results.log, *.sha256, *.stdout, *.stderr, *.rc) is kept.
+*.o
+*.a
+app_plain
+app_safe
+negative_safe
+_err
+_out

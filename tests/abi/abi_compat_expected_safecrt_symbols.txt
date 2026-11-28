@@ -1,0 +1,10 @@
+cplus_memcpy_s
+cplus_strcpy_s
+cplus_sc_memcpy_s
+cplus_safe_alloc_get_meta
+cplus_safe_stats_get
+cplus_safe_platform_probe
+cplus_runtime_set_handler
+cplus_safe_log_set_level
+cplus_fopen_s
+cplus_printf_s

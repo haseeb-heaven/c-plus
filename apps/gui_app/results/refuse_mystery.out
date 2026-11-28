@@ -1,0 +1,2 @@
+GUI_REFUSED tag=mystery category=1 code=108 message=refuse: unknown case
+GUI_RESULT refuse mystery REFUSED 108

@@ -1,0 +1,2 @@
+C2GUI_REPORT input=tools/c2modern_gui/fixtures/hello.c output=out.cpp status=PENDING build=NOT_RUN run=NOT_RUN source_lines=2 source_bytes=61
+C2GUI_RESULT convert OK 0

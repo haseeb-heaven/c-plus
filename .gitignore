@@ -26,7 +26,18 @@ cplus_rewritten.c
 .agent
 .codex
 
-scratch
+scratch/
+
+# Root-level compiled test/demo artifacts (user-run, not shipped)
+# (ignore the file/dir name; git will ignore both files and dirs with these names)
+branch_free_null_ok
+case_CTRL_direct_null
+len_runtime_metadata
+init_all_branches
+null_outparam
+repro_shadow_return
+t
+
 
 benchmarks/out/
 
@@ -34,3 +45,142 @@ examples/out/
 
 # Ignore all Apple property-list files
 *.plist
+
+__pycache__/
+*.pyc
+
+# Transient test output (binaries + logs). Kept gitignored; do not commit.
+tests/out/
+tests/**/out/
+tests/**/bin/
+demos/**/out/
+
+# Transient perf-runner work directories (binaries/timing logs)
+tests/compiler/agent1/results_perf/work*/
+
+# Generated differential/optimizer binaries
+tests/compiler/optimizer/results/bin/
+tests/compiler/fuzz/results/failures/
+tests/compiler/differential/results/mismatches/*/*.bin
+tests/compiler/differential/probe/cases/*.bin
+
+# Benchmark and comparison binaries
+tests/compiler/memory_safety_compare/cases/*.bin
+benchmarks/cplus_vs_rust/results/*.bin
+benchmarks/rust_vs_cplus/results/*.bin
+
+# Generated binaries from the new compatibility/adversarial harnesses
+tests/compiler/abi_real_world/cases/*.bin
+tests/compiler/abi_real_world/cases/*.o
+tests/compiler/abi_real_world/cases/*.a
+tests/compiler/real_world_c/bin/
+tests/compiler/real_world_c/cache/
+tests/compiler/c_standards/results/generated/*.bin
+tests/compiler/adversarial_campaign/results/*.bin
+
+# Wave 3 real-world harness generated artifacts
+tests/compiler/real_world_c/wave3/cache/
+tests/compiler/real_world_c/wave3/bin/
+tests/compiler/real_world_c/wave3/results/bin/
+tests/compiler/real_world_c/wave3/results/logs/
+tests/compiler/real_world_c/wave3/results/generated/
+
+tests/compiler/full_coverage/out/
+tests/compiler/full_coverage/logs/
+tests/compiler/safety_matrix/__pycache__/
+tests/compiler/optimized_traps/results/*.bin
+tests/compiler/full_coverage/out/
+tests/compiler/full_coverage/logs/
+tests/compiler/optimized_traps/results/*.bin
+tests/compiler/abi_mixed/results/abi_mixed_*/
+tests/compiler/c_apps/results/*.bin
+tests/compiler/c_apps/results/*.clang
+tests/compiler/c_apps/results/*.bin
+
+tests/compiler/cross_compiler/results/*.bin
+tests/compiler/cross_compiler/results/*.rs
+tests/compiler/cross_compiler/results/*.c
+tests/compiler/cross_compiler/results/filc.tar.xz
+tests/compiler/cross_compiler/results/filc/
+tests/compiler/cross_compiler/results/*.out
+tests/compiler/cross_compiler/results/*.err
+tests/compiler/cross_compiler/results/*.bench
+tests/compiler/cross_compiler/results/core
+tests/compiler/input_safety/*.bin
+tests/compiler/exceptions/*.bin
+tests/compiler/exceptions/fuzz_work/
+
+# Regenerated scenario scratch/build artifacts
+tests/compiler/web_10000/scratch/
+tests/compiler/api_coverage/.scratch/
+tests/compiler/stdlib_api_coverage/build/
+tests/compiler/cert_rules_1000/scratch/
+tests/compiler/e2e_10k/*/scratch/
+tests/compiler/e2e_10k/*/generated/
+tests/compiler/auto_runtime/*.bin
+tests/compiler/borrow_escape/results/*.bin
+tests/compiler/default_policy/results/*.bin
+tests/compiler/pointer_provenance/results/*.bin
+tests/compiler/ast_identity/results/*.bin
+
+# Generated root binaries and test artifacts (never commit).
+/branch_free_null_ok
+/case_CTRL_direct_null
+/init_all_branches
+/len_runtime_metadata
+/null_outparam
+/app_dump.db
+/out/
+# Generated benchmark logs/artifacts (never commit; source + scripts stay).
+benchmarks/**/*.log
+benchmarks/**/*.err
+benchmarks/**/*.profraw
+benchmarks/**/*.profdata
+tests/compiler/data_race/results/*.bin
+tests/compiler/abi_link_flags/results/*.bin
+tests/compiler/abi_link_flags/cases/*.o
+tests/compiler/abi_link_flags/cases/*.a
+tests/compiler/abi_link_flags/cases/*.dylib
+tests/compiler/raii_cleanup/results/*.bin
+
+# Generated app proof artifacts (runners recreate them).
+apps/gui_app/bin/
+apps/gui_app/results/
+
+# Generated example artifacts (runners recreate them).
+examples/**/bin/
+examples/**/out/
+examples/**/results/
+examples/**/.run/
+examples/modern_c_ports/*.pgm
+examples/modern_c_ports/*.ppm
+
+# Generated benchmark / adversarial artifacts (runners recreate them).
+benchmarks/**/results/
+benchmarks/**/out/
+benchmarks/**/.build/
+tests/**/results/
+/deep_collections_growth
+
+# Local scratch / duplicate demo trees (not part of the source tree).
+/demos/
+/out/
+/.cache/
+/scratch/
+
+# Flat runner artifacts written directly into test directories (not results/).
+tests/stdlib/scoped_mem/*.log
+tests/stdlib/scoped_mem/*.out
+tests/stdlib/scoped_mem/*.err
+tests/stdlib/scoped_mem/test_chain
+tests/stdlib/scoped_mem/test_poison
+tests/stdlib/scoped_mem/test_release
+
+# OpenQodex local tool state (reports/config are tool-local, not source).
+/.openqodex/
+
+# Additional scoped_mem runner binaries (cross-TU and poison regressions).
+tests/stdlib/scoped_mem/gen_test
+tests/stdlib/scoped_mem/scratch_view_owner
+tests/stdlib/scoped_mem/scratch_view_owner_release
+tests/stdlib/scoped_mem/test_align

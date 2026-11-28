@@ -1,0 +1,41 @@
+/* Minimal self-checking harness shared by the resource-exhaustion fixtures.
+ *
+ * Every check prints exactly "<tag> <1|0>" (1 = pass).  A declared,
+ * environment-dependent skip prints "<tag> 1" plus a machine-readable
+ * "SKIP_REASON <tag> <reason>" line; it is never silently folded into a pass.
+ * Every main() ends with re_report(), which prints the canonical last line
+ * "RESOURCE_EXHAUSTION <checks> <failures>" used by run.sh's verifier.
+ *
+ * Strict-safe: no variadic format strings (c+ print() dispatches by type),
+ * no pointer subscripts, no variable division/modulo.
+ */
+#ifndef CPLUS_RE_HARNESS_HP
+#define CPLUS_RE_HARNESS_HP
+
+#include <stdio.h>
+#include "cplus/cplus.h"
+
+static int re_harness_checks = 0;
+static int re_harness_failures = 0;
+
+static void re_check(const char *tag, int cond) {
+    re_harness_checks++;
+    if (!cond)
+        re_harness_failures++;
+    print(tag, cond ? 1 : 0);
+    (void)!fflush(stdout);
+}
+
+static void re_skip(const char *tag, const char *reason) {
+    re_harness_checks++;
+    print(tag, 1);
+    print("SKIP_REASON", tag, reason);
+    (void)!fflush(stdout);
+}
+
+static void re_report(void) {
+    print("RESOURCE_EXHAUSTION", re_harness_checks, re_harness_failures);
+    (void)!fflush(stdout);
+}
+
+#endif /* CPLUS_RE_HARNESS_HP */

@@ -1,0 +1,206 @@
+{
+  "meta": {
+    "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+    "compiler_version": "C+ 0.1.0",
+    "date_utc": "2026-11-23T07:05:19Z",
+    "host": "Darwin 27.2.0 arm64",
+    "timer": "/usr/bin/time -l",
+    "runs_per_config": 3,
+    "selection": "best (minimum real) of timed runs; RSS from that run",
+    "regression_threshold": 2.0,
+    "regression_baseline": "legacy_c_release",
+    "configs": {
+      "safe_release": "c+ build <src> --release --sanitize=none",
+      "safe_debug": "c+ build <src> --debug --sanitize=none",
+      "legacy_c_release": "c+ build <src> --legacy-c --release"
+    },
+    "assertions": {
+      "all_runs_exit_zero": true,
+      "release_stdout_equals_debug_stdout": true,
+      "release_stdout_equals_legacy_stdout": true
+    }
+  },
+  "programs": [
+    {
+      "name": "array",
+      "description": "array indexing loop",
+      "expected_stdout": "array_sum=19353600000",
+      "configs": {
+        "safe_release": {
+          "real_s": 0.02,
+          "user_s": 0.02,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "array_sum=19353600000"
+        },
+        "safe_debug": {
+          "real_s": 0.59,
+          "user_s": 0.58,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "array_sum=19353600000"
+        },
+        "legacy_c_release": {
+          "real_s": 0.02,
+          "user_s": 0.02,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "array_sum=19353600000"
+        }
+      },
+      "ratios": {
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 29.5
+      },
+      "regressed_over_2x": false
+    },
+    {
+      "name": "pointer",
+      "description": "pointer access loop",
+      "expected_stdout": "ptr_sum=19353600000",
+      "configs": {
+        "safe_release": {
+          "real_s": 0.02,
+          "user_s": 0.02,
+          "sys_s": 0.0,
+          "rss_bytes": 1654784,
+          "exit_code": 0,
+          "stdout": "ptr_sum=19353600000"
+        },
+        "safe_debug": {
+          "real_s": 0.58,
+          "user_s": 0.58,
+          "sys_s": 0.0,
+          "rss_bytes": 1654784,
+          "exit_code": 0,
+          "stdout": "ptr_sum=19353600000"
+        },
+        "legacy_c_release": {
+          "real_s": 0.02,
+          "user_s": 0.02,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "ptr_sum=19353600000"
+        }
+      },
+      "ratios": {
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 29.0
+      },
+      "regressed_over_2x": false
+    },
+    {
+      "name": "arith",
+      "description": "integer arithmetic loop",
+      "expected_stdout": "arith=25499988126",
+      "configs": {
+        "safe_release": {
+          "real_s": 0.2,
+          "user_s": 0.2,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "arith=25499988126"
+        },
+        "safe_debug": {
+          "real_s": 0.61,
+          "user_s": 0.61,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "arith=25499988126"
+        },
+        "legacy_c_release": {
+          "real_s": 0.2,
+          "user_s": 0.2,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "arith=25499988126"
+        }
+      },
+      "ratios": {
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 3.05
+      },
+      "regressed_over_2x": false
+    },
+    {
+      "name": "nested",
+      "description": "nested loops",
+      "expected_stdout": "nested=56250000000",
+      "configs": {
+        "safe_release": {
+          "real_s": 0.16,
+          "user_s": 0.16,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "nested=56250000000"
+        },
+        "safe_debug": {
+          "real_s": 2.91,
+          "user_s": 2.9,
+          "sys_s": 0.0,
+          "rss_bytes": 1654784,
+          "exit_code": 0,
+          "stdout": "nested=56250000000"
+        },
+        "legacy_c_release": {
+          "real_s": 0.16,
+          "user_s": 0.16,
+          "sys_s": 0.0,
+          "rss_bytes": 1638400,
+          "exit_code": 0,
+          "stdout": "nested=56250000000"
+        }
+      },
+      "ratios": {
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 18.188
+      },
+      "regressed_over_2x": false
+    },
+    {
+      "name": "alloc",
+      "description": "allocation and cleanup",
+      "expected_stdout": "alloc=51609600000",
+      "configs": {
+        "safe_release": {
+          "real_s": 0.07,
+          "user_s": 0.07,
+          "sys_s": 0.0,
+          "rss_bytes": 1736704,
+          "exit_code": 0,
+          "stdout": "alloc=51609600000"
+        },
+        "safe_debug": {
+          "real_s": 1.56,
+          "user_s": 1.55,
+          "sys_s": 0.0,
+          "rss_bytes": 1736704,
+          "exit_code": 0,
+          "stdout": "alloc=51609600000"
+        },
+        "legacy_c_release": {
+          "real_s": 0.07,
+          "user_s": 0.07,
+          "sys_s": 0.0,
+          "rss_bytes": 1671168,
+          "exit_code": 0,
+          "stdout": "alloc=51609600000"
+        }
+      },
+      "ratios": {
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 22.286
+      },
+      "regressed_over_2x": false
+    }
+  ],
+  "any_config_regressed_over_2x": false
+}

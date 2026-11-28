@@ -1,0 +1,13 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_legacy_c.a
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+lib_interop_archive.legacy_c.helper.o:
+0000000000000000 T _abi_lib_mul
+000000000000004c T _abi_lib_pair
+0000000000000028 T _abi_lib_scale
+
+--- stderr ---
+

@@ -1,0 +1,51 @@
+{
+  "header": "stdlib/collections.hp",
+  "commands": {
+    "check": "c+ check --strict <file>",
+    "build": "c+ build --strict --sanitize=none <file> -o <out>"
+  },
+  "cases": [
+    {
+      "file": "collections_use_after_drop.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: intmap::drop() frees keys/values/state and zeroes the class, but C+ tracks only raw managed pointers and resource structs, not the buffers inside a lightweight `class`. check rc=0, build rc=0, no [CPLUS- diagnostic; calling drop() twice is also unprovable. At runtime the checked accessors report the dead state (size()==0, get()==-1, *out untouched). Cover owner liveness in a runtime/behavioral test."
+    },
+    {
+      "file": "collections_use_after_move.cp",
+      "expect": "RUNTIME",
+      "observed": "PARTIAL",
+      "note": "GAP (untagged rejection): cplus_move(a) zeroes a and transfers the buffers to b. Both commands exit 1 on `a.size()` with 'use-after-move: use of moved-from resource a'; a borrowed intmap* alias is rejected with 'borrow ... used after that resource was moved'. Neither message has a [CPLUS- prefix, so per the suite rule this is not tagged C+ enforcement and the runner reports PARTIAL, not REJECT. (Probe: cplus_check_live(key) after stdlib_release(key) DOES give [CPLUS-LIFETIME], so only the explicit liveness API is tagged.)"
+    },
+    {
+      "file": "collections_dangling_key.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: strmap copies keys, so the map survives, but the caller's key buffer is dangling after stdlib_release(key) and strmap::get(key,...) hashes/compares freed memory. C+ diagnoses a released pointer only via `p.len` or explicit cplus_check_live(p), never as an ordinary function argument. check rc=0, build rc=0, no [CPLUS- diagnostic. Runtime get() happens to return -1 on recycled memory; the stale read itself is silent. Cover in a runtime/behavioral test."
+    },
+    {
+      "file": "collections_mutable_alias.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: `left` and `right` are two mutable intmap* aliases of the same owner; either can insert/remove/drop the shared buffers. C+ has no aliasing/exclusivity analysis for lightweight class owners. check rc=0, build rc=0, no [CPLUS- diagnostic; binary prints 2 2 2 and exits 0. Copying the owner itself (`intmap b = a;`) IS rejected, but as an UNTAGGED 'resource b cannot be copied from a' message, so it also fails the [CPLUS- rule."
+    },
+    {
+      "file": "collections_valid.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: live intmap/strmap/intset/deque/stack/queue/list with in-range checked accessors and exactly one drop() per owner. check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0 with all expected values."
+    },
+    {
+      "file": "collections_valid_borrow.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: an intmap* borrow used only before the owner's drop(), plus a stack key buffer mutated after strmap::put() (keys are copied). check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0 with all expected values."
+    }
+  ],
+  "gaps": [
+    "use-after-drop: no owner-liveness tracking for class-based containers (RUNTIME)",
+    "use-after-move: rejection exists but is UNTAGGED, so it does not count as C+ enforcement (RUNTIME)",
+    "dangling key: released-pointer-as-argument is not analysed; only explicit cplus_check_live/p.len is tagged (RUNTIME)",
+    "mutable alias: no pointer-alias/exclusivity analysis for class owners (RUNTIME)"
+  ]
+}

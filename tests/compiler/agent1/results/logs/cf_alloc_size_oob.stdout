@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_alloc_size_oob.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/alloc_size_oob.c:8:12: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'arr'

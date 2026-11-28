@@ -1,0 +1,16 @@
+FDiff --- a
+FDiff +++ b
+FDiff @@ -3 +4 @@
+FDiff  alpha
+FDiff -beta
+FDiff +BETA
+FDiff  gamma
+FDiff +delta
+FDiff changes 3
+FDiff --- a
+FDiff +++ b
+FDiff @@ -3 +3 @@
+FDiff  alpha
+FDiff  beta
+FDiff  gamma
+FDiff changes 0

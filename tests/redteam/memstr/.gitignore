@@ -1,0 +1,14 @@
+# REDTEAM memstr generated artifacts (never commit binaries or logs).
+results/
+*.o
+attack_harness
+probe
+probe2
+probe.c
+probe2.c
+repro679
+repro_corrupt
+*.dSYM/
+*.out
+test_cases.tsv
+all_cases.tmp

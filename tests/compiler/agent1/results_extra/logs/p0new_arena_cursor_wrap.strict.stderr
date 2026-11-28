@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 16 is outside the bounds of 'arena'
+      arena[end] = 0;
+      ^~~~~
+help: array contains 8 elements; valid indices are 0..7

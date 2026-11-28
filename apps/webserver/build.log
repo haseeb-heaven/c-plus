@@ -1,0 +1,5 @@
+./stdlib/web.hp:83:9: warning: allocation 's' leaks on this return path (no matching free)
+      if (web_server_init(s, host, port) != 0) {
+          ^~~~~~~~~~~~~~~
+help: free/close the resource on every return path, or use a C+ managed allocation
+clang: warning: /tmp/resolve2/build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

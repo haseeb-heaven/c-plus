@@ -1,0 +1,14 @@
+SCH REFUSE capacity cat= 2 code= 101 msg= capacity out of range
+SCH REFUSE tick cat= 2 code= 101 msg= empty queue
+SCH capacity 2
+SCH arrive a prio= 0 burst= 1
+SCH REFUSE arrive cat= 1 code= 106 msg= duplicate name
+SCH arrive b prio= 0 burst= 1
+SCH REFUSE arrive cat= 2 code= 107 msg= queue overflow
+SCH REFUSE capacity cat= 2 code= 101 msg= capacity out of range
+SCH REFUSE arrive cat= 1 code= 108 msg= invalid priority
+SCH REFUSE arrive cat= 2 code= 101 msg= burst out of range
+SCH REFUSE arrive cat= 2 code= 101 msg= name
+SCH REFUSE run cat= 2 code= 101 msg= run count out of range
+SCH REFUSE bogus cat= 1 code= 108 msg= unknown command
+SCH_SUMMARY 13 3 10 0

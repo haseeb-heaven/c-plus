@@ -1,0 +1,2 @@
+GUI_REFUSED tag=null-serial-size-output category=1 code=102 message=widgets: NULL serialization output
+GUI_RESULT refuse null-serial-size-output REFUSED 102

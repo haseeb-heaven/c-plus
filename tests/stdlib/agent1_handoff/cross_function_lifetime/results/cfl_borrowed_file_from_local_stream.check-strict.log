@@ -1,0 +1,6 @@
+COMMAND: ./build/c+ check --strict tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_borrowed_file_from_local_stream.cp
+--- stdout ---
+check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_borrowed_file_from_local_stream.cp ok
+--- stderr ---
+--- exit ---
+0

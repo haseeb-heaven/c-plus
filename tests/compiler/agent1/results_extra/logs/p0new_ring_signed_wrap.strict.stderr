@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_signed_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 65535 is outside the bounds of 'slots'
+      slots[idx] = 0;
+      ^~~~~
+help: array contains 8 elements; valid indices are 0..7

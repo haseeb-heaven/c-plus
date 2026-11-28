@@ -1,0 +1,3 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_copy_underflow.c:14:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] copy of 4294967289 bytes exceeds destination 'dst'
+      memcpy(dst, src, body);
+      ^~~~~~

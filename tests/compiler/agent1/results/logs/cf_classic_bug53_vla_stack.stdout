@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug53_vla_stack.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug53_vla_stack.c:3:28: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc

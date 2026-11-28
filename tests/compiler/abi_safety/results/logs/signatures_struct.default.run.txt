@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+p=7,2.5 big=11,22,33,44 sz=32 sum=110
+
+--- stderr ---
+

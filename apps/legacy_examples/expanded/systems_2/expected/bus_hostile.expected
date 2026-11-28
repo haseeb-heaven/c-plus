@@ -1,0 +1,11 @@
+EB topic room
+EB REFUSE topic cat= 1 code= 106 msg= duplicate topic
+EB sub room alice
+EB REFUSE sub cat= 1 code= 106 msg= duplicate subscription
+EB REFUSE pub cat= 2 code= 101 msg= payload
+EB REFUSE pub cat= 1 code= 106 msg= unknown topic
+EB REFUSE unsub cat= 1 code= 106 msg= unknown subscriber
+EB REFUSE sub cat= 2 code= 101 msg= topic
+EB REFUSE sub cat= 2 code= 101 msg= subscriber
+EB REFUSE bogus cat= 1 code= 108 msg= unknown command
+EB_SUMMARY 10 2 8 0

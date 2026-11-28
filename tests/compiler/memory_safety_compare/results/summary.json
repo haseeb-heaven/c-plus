@@ -1,0 +1,462 @@
+{
+  "suite": "memory_safety_compare",
+  "generated_at": "2026-11-23T13:48:03",
+  "toolchains": {
+    "cplus_bin": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+    "cplus_versions": [
+      "C+ 0.1.0",
+      "Language: C+ (C with memory safety, deterministic RAII, lightweight classes)",
+      "Backend: host Clang/LLVM"
+    ],
+    "rustc": "rustc",
+    "rustc_versions": [
+      "rustc 1.100.0 (0ef1bc386 2026-11-09)"
+    ]
+  },
+  "flags": {
+    "cplus_check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none <SRC>",
+    "cplus_build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none <SRC> -o <BIN>",
+    "rustc": "rustc --edition 2021 -C overflow-checks=on <SRC> -o <BIN>",
+    "sanitizers": "DISABLED (c+ --sanitize=none; rustc without -Zsanitizer)"
+  },
+  "timeout_seconds": 60,
+  "workers": 2,
+  "totals": {
+    "categories": 7,
+    "cases": 14,
+    "cases_passed": 14,
+    "cases_failed": 0,
+    "by_outcome": {
+      "runtime_trap": 5,
+      "compile_reject": 9
+    },
+    "by_lang_outcome": {
+      "cplus": {
+        "runtime_trap": 1,
+        "compile_reject": 6
+      },
+      "rust": {
+        "runtime_trap": 4,
+        "compile_reject": 3
+      }
+    }
+  },
+  "by_category": {
+    "out_of_bounds_index": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "runtime_trap",
+      "rust": "runtime_trap"
+    },
+    "use_after_free": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "compile_reject",
+      "rust": "compile_reject"
+    },
+    "double_free": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "compile_reject",
+      "rust": "compile_reject"
+    },
+    "invalid_free": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "compile_reject",
+      "rust": "compile_reject"
+    },
+    "null_deref": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "compile_reject",
+      "rust": "runtime_trap"
+    },
+    "integer_overflow": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "compile_reject",
+      "rust": "runtime_trap"
+    },
+    "invalid_shift": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "cplus": "compile_reject",
+      "rust": "runtime_trap"
+    }
+  },
+  "failures": [],
+  "cases": [
+    {
+      "name": "oob_index__cplus",
+      "category": "out_of_bounds_index",
+      "lang": "cplus",
+      "outcome": "runtime_trap",
+      "note": "volatile index 7 into int a[4]; C+ runtime bounds check aborts",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 7;\nstatic int a[4] = {1, 2, 3, 4};\n\nint main(void) {\n    printf(\"v=%d\\n\", a[idx]);\n    return 0;\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__cplus.c",
+          "rc": 0,
+          "timed_out": false,
+          "crashed": false,
+          "output": "check: <SRC> ok"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__cplus.bin",
+          "rc": 0,
+          "timed_out": false,
+          "crashed": false,
+          "output": ""
+        },
+        "run": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__cplus.bin",
+          "rc": -6,
+          "timed_out": false,
+          "crashed": false,
+          "output": "C+ error: index 7 is outside the bounds of 'a' (length 4)"
+        }
+      },
+      "reasons": [],
+      "result": "RUNTIME_TRAP",
+      "passed": true
+    },
+    {
+      "name": "oob_index__rust",
+      "category": "out_of_bounds_index",
+      "lang": "rust",
+      "outcome": "runtime_trap",
+      "note": "black_box index 7 into a Vec of len 4; Rust slice index panics",
+      "source": "fn main() {\n    let v = vec![10, 20, 30, 40];\n    let idx = std::hint::black_box(7usize);\n    println!(\"{}\", v[idx]);\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__rust.bin",
+          "rc": 0,
+          "timed_out": false,
+          "crashed": false,
+          "output": ""
+        },
+        "run": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__rust.bin",
+          "rc": 101,
+          "timed_out": false,
+          "crashed": false,
+          "output": "thread 'main' (24848921) panicked at <SRC>:4:21:\nindex out of bounds: the len is 4 but the index is 7\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+        }
+      },
+      "reasons": [],
+      "result": "RUNTIME_TRAP",
+      "passed": true
+    },
+    {
+      "name": "uaf__cplus",
+      "category": "use_after_free",
+      "lang": "cplus",
+      "outcome": "compile_reject",
+      "note": "subscript of a released pointer is statically rejected",
+      "source": "#include <stdlib.h>\n\nint main(void) {\n    int *p = malloc(16);\n    if (!p) return 2;\n    free(p);\n    return p[0];\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/uaf__cplus.c",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:7:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n      return p[0];\n             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4\nnote: owner released: <SRC>:6"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/uaf__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/uaf__cplus.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:7:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n      return p[0];\n             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4\nnote: owner released: <SRC>:6"
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "uaf__rust",
+      "category": "use_after_free",
+      "lang": "rust",
+      "outcome": "compile_reject",
+      "note": "borrow checker rejects dropping a Box while a &mut borrow is live",
+      "source": "fn main() {\n    let mut v = Box::new(1i32);\n    let p = &mut *v;\n    drop(v);\n    *p = 2;\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/uaf__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/uaf__rust.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "error[E0505]: cannot move out of `v` because it is borrowed\n --> <SRC>:4:10\n  |\n2 |     let mut v = Box::new(1i32);\n  |         ----- binding `v` declared here\n3 |     let p = &mut *v;\n  |             ------- borrow of `*v` occurs here\n4 |     drop(v);\n  |          ^ move out of `v` occurs here\n5 |     *p = 2;\n  |     ------ borrow later used here\n  |\nhelp: consider cloning the value if the performance cost is acceptable\n  |\n3 -     let p = &mut *v;\n3 +     let p = &mut v.clone();\n  |\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0505`."
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "double_free__cplus",
+      "category": "double_free",
+      "lang": "cplus",
+      "outcome": "compile_reject",
+      "note": "ownership analysis rejects the second free of the same owner",
+      "source": "#include <stdlib.h>\n\nint main(void) {\n    int *p = malloc(16);\n    if (!p) return 2;\n    free(p);\n    free(p);\n    return 0;\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__cplus.c",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'\n      free(p);\n      ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__cplus.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'\n      free(p);\n      ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "double_free__rust",
+      "category": "double_free",
+      "lang": "rust",
+      "outcome": "compile_reject",
+      "note": "second drop uses a Box already moved into the first drop",
+      "source": "fn main() {\n    let v = Box::new(1i32);\n    drop(v);\n    drop(v);\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/double_free__rust.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "error[E0382]: use of moved value: `v`\n --> <SRC>:4:10\n  |\n2 |     let v = Box::new(1i32);\n  |         - move occurs because `v` has type `Box<i32>`, which does not implement the `Copy` trait\n3 |     drop(v);\n  |          - value moved here\n4 |     drop(v);\n  |          ^ value used here after move\n  |\nhelp: consider cloning the value if the performance cost is acceptable\n  |\n3 |     drop(v.clone());\n  |           ++++++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0382`."
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "invalid_free__cplus",
+      "category": "invalid_free",
+      "lang": "cplus",
+      "outcome": "compile_reject",
+      "note": "free(p+2) on a malloc owner is statically rejected",
+      "source": "#include <stdlib.h>\n\nint main(void) {\n    int *p = malloc(64);\n    if (!p) return 2;\n    free(p + 2);\n    return 0;\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_free__cplus.c",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n      free(p + 2);\n      ^~~~"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_free__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_free__cplus.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n      free(p + 2);\n      ^~~~"
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "invalid_free__rust",
+      "category": "invalid_free",
+      "lang": "rust",
+      "outcome": "compile_reject",
+      "note": "safe deallocation requires Box ownership; interior *mut is not one",
+      "source": "fn free_it(owned: Box<i32>) { drop(owned); }\n\nfn main() {\n    let arr = [1i32, 2, 3];\n    let p: *mut i32 = &arr[1] as *const i32 as *mut i32;\n    free_it(p);\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_free__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_free__rust.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "error[E0308]: mismatched types\n --> <SRC>:6:13\n  |\n6 |     free_it(p);\n  |     ------- ^ expected `Box<i32>`, found `*mut i32`\n  |     |\n  |     arguments to this function are incorrect\n  |\n  = note:   expected struct `Box<i32>`\n          found raw pointer `*mut i32`\nnote: function defined here\n --> <SRC>:1:4\n  |\n1 | fn free_it(owned: Box<i32>) { drop(owned); }\n  |    ^^^^^^^ ---------------\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0308`."
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "null_deref__cplus",
+      "category": "null_deref",
+      "lang": "cplus",
+      "outcome": "compile_reject",
+      "note": "dereference of a provably null pointer is statically rejected",
+      "source": "int main(void) {\n    int *p = 0;\n    return *p;\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__cplus.c",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:3:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n      return *p;\n             ^"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__cplus.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:3:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n      return *p;\n             ^"
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "null_deref__rust",
+      "category": "null_deref",
+      "lang": "rust",
+      "outcome": "runtime_trap",
+      "note": "Rust expresses 'null' as Option; unwrapping None panics",
+      "source": "fn main() {\n    let p: Option<&i32> = None;\n    println!(\"{}\", p.unwrap());\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__rust.bin",
+          "rc": 0,
+          "timed_out": false,
+          "crashed": false,
+          "output": ""
+        },
+        "run": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__rust.bin",
+          "rc": 101,
+          "timed_out": false,
+          "crashed": false,
+          "output": "thread 'main' (24849418) panicked at <SRC>:3:22:\ncalled `Option::unwrap()` on a `None` value\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+        }
+      },
+      "reasons": [],
+      "result": "RUNTIME_TRAP",
+      "passed": true
+    },
+    {
+      "name": "integer_overflow__cplus",
+      "category": "integer_overflow",
+      "lang": "cplus",
+      "outcome": "compile_reject",
+      "note": "constant signed overflow is statically rejected",
+      "source": "int main(void) {\n    int x = 2147483647 + 1;\n    return x;\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__cplus.c",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:2:13: error: [CPLUS-ARITH] signed integer overflow in addition\n      int x = 2147483647 + 1;\n              ^~~~~~~~~~"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__cplus.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:2:13: error: [CPLUS-ARITH] signed integer overflow in addition\n      int x = 2147483647 + 1;\n              ^~~~~~~~~~"
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "integer_overflow__rust",
+      "category": "integer_overflow",
+      "lang": "rust",
+      "outcome": "runtime_trap",
+      "note": "operands hidden by black_box; debug overflow check panics",
+      "source": "fn main() {\n    let a = std::hint::black_box(i32::MAX);\n    let b = std::hint::black_box(1);\n    println!(\"{}\", a + b);\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__rust.bin",
+          "rc": 0,
+          "timed_out": false,
+          "crashed": false,
+          "output": ""
+        },
+        "run": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__rust.bin",
+          "rc": 101,
+          "timed_out": false,
+          "crashed": false,
+          "output": "thread 'main' (24849588) panicked at <SRC>:4:20:\nattempt to add with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+        }
+      },
+      "reasons": [],
+      "result": "RUNTIME_TRAP",
+      "passed": true
+    },
+    {
+      "name": "invalid_shift__cplus",
+      "category": "invalid_shift",
+      "lang": "cplus",
+      "outcome": "compile_reject",
+      "note": "constant shift >= width of left operand is statically rejected",
+      "source": "int main(void) {\n    int x = 1 << 32;\n    return x;\n}\n",
+      "steps": {
+        "check": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__cplus.c",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:2:13: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n      int x = 1 << 32;\n              ^"
+        },
+        "compile": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__cplus.bin",
+          "rc": 1,
+          "timed_out": false,
+          "crashed": false,
+          "output": "<SRC>:2:13: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n      int x = 1 << 32;\n              ^"
+        }
+      },
+      "reasons": [],
+      "result": "COMPILE_REJECT",
+      "passed": true
+    },
+    {
+      "name": "invalid_shift__rust",
+      "category": "invalid_shift",
+      "lang": "rust",
+      "outcome": "runtime_trap",
+      "note": "shift amount hidden by black_box; debug shift check panics",
+      "source": "fn main() {\n    let n = std::hint::black_box(32u32);\n    println!(\"{}\", 1i32 << n);\n}\n",
+      "steps": {
+        "compile": {
+          "command": "rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__rust.bin",
+          "rc": 0,
+          "timed_out": false,
+          "crashed": false,
+          "output": ""
+        },
+        "run": {
+          "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__rust.bin",
+          "rc": 101,
+          "timed_out": false,
+          "crashed": false,
+          "output": "thread 'main' (24849765) panicked at <SRC>:3:20:\nattempt to shift left with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+        }
+      },
+      "reasons": [],
+      "result": "RUNTIME_TRAP",
+      "passed": true
+    }
+  ]
+}

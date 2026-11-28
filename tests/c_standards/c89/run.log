@@ -1,0 +1,665 @@
+=== C89/C90 support matrix ===
+date: 2026-11-23T07:05:07Z
+driver: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+
+clang:  /usr/bin/clang (Apple clang version 16.0.0 (clang-1600.0.26.6))
+root:   /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+
+--- 1. Reference: plain clang on genuine C89 source ---
+$ /usr/bin/clang -std=c89 -pedantic-errors hello89.c -o hello89.ref
+[exit=0]
+RESULT reference clang -std=c89 -pedantic-errors hello89.c exit=0
+
+--- 2. C+ driver: hello89.c, -std spelling variants ---
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c89 --sanitize=none -o hello89.cplus.c89
+[exit=0]
+RESULT spelling=c89 source=hello89.c build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c90 --sanitize=none -o hello89.cplus.c90
+[exit=0]
+RESULT spelling=c90 source=hello89.c build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=iso9899:1990 --sanitize=none -o hello89.cplus.iso9899:1990
+[exit=0]
+RESULT spelling=iso9899:1990 source=hello89.c build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=gnu89 --sanitize=none -o hello89.cplus.gnu89
+[exit=0]
+RESULT spelling=gnu89 source=hello89.c build_exit=0
+
+--- 3. C+ driver: hello89.c, -std spelling variants + -pedantic-errors ---
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c89 -pedantic-errors --sanitize=none -o hello89.ped.c89
+[exit=0]
+RESULT spelling=c89 source=hello89.c pedantic=1 build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c90 -pedantic-errors --sanitize=none -o hello89.ped.c90
+[exit=0]
+RESULT spelling=c90 source=hello89.c pedantic=1 build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=iso9899:1990 -pedantic-errors --sanitize=none -o hello89.ped.iso9899:1990
+[exit=0]
+RESULT spelling=iso9899:1990 source=hello89.c pedantic=1 build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=gnu89 -pedantic-errors --sanitize=none -o hello89.ped.gnu89
+[exit=0]
+RESULT spelling=gnu89 source=hello89.c pedantic=1 build_exit=0
+
+--- 4. Negative control: C99 mixed declaration in probe_c99.c ---
+$ /usr/bin/clang -std=c89 -pedantic-errors -fsyntax-only probe_c99.c
+probe_c99.c:11:9: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   11 |     int j = 2; /* C99 mixed declaration: illegal in C90 */
+      |         ^
+1 error generated.
+[exit=1]
+RESULT reference probe_c99.c c89 pedantic exit=1 (expected nonzero)
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build probe_c99.c -std=c89 --sanitize=none -o probe.cplus.c89
+[exit=0]
+RESULT c+ probe_c99.c -std=c89 (no pedantic) exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build probe_c99.c -std=c89 -pedantic-errors --sanitize=none -o probe.cplus.ped
+probe_c99.c:11:9: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   11 |     int j = 2; /* C99 mixed declaration: illegal in C90 */
+      |         ^
+1 error generated.
+[exit=1]
+RESULT c+ probe_c99.c -std=c89 -pedantic-errors exit=1 (expected nonzero)
+
+--- 5. Runtime comparison (timeout 30) ---
+$ ./hello89.ref
+line 0: C89/ISO C90 source compiled by the C+ driver
+line 1: C89/ISO C90 source compiled by the C+ driver
+line 2: C89/ISO C90 source compiled by the C+ driver
+total=3
+[exit=0]
+RESULT run hello89.ref exit=0
+$ ./hello89.cplus.c89
+line 0: C89/ISO C90 source compiled by the C+ driver
+line 1: C89/ISO C90 source compiled by the C+ driver
+line 2: C89/ISO C90 source compiled by the C+ driver
+total=3
+[exit=0]
+RESULT run hello89.cplus.c89 exit=0
+RESULT stdout comparison spelling=c89 IDENTICAL
+sha256 ref=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536 cplus.c89=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536
+$ ./hello89.cplus.c90
+line 0: C89/ISO C90 source compiled by the C+ driver
+line 1: C89/ISO C90 source compiled by the C+ driver
+line 2: C89/ISO C90 source compiled by the C+ driver
+total=3
+[exit=0]
+RESULT run hello89.cplus.c90 exit=0
+RESULT stdout comparison spelling=c90 IDENTICAL
+sha256 ref=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536 cplus.c90=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536
+$ ./hello89.cplus.iso9899:1990
+line 0: C89/ISO C90 source compiled by the C+ driver
+line 1: C89/ISO C90 source compiled by the C+ driver
+line 2: C89/ISO C90 source compiled by the C+ driver
+total=3
+[exit=0]
+RESULT run hello89.cplus.iso9899:1990 exit=0
+RESULT stdout comparison spelling=iso9899:1990 IDENTICAL
+sha256 ref=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536 cplus.iso9899:1990=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536
+$ ./hello89.cplus.gnu89
+line 0: C89/ISO C90 source compiled by the C+ driver
+line 1: C89/ISO C90 source compiled by the C+ driver
+line 2: C89/ISO C90 source compiled by the C+ driver
+total=3
+[exit=0]
+RESULT run hello89.cplus.gnu89 exit=0
+RESULT stdout comparison spelling=gnu89 IDENTICAL
+sha256 ref=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536 cplus.gnu89=3ef9faec661724985bd51ca5bfb9979612aca37e58172055ed66911b0e589536
+
+--- 6. Real projects with -std=c89 ---
+>>> project: game_a/original/snake.c
+$ /usr/bin/clang -std=c89 -pedantic-errors -fsyntax-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:16:40: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   16 |     tcgetattr(0,&orig); struct termios t=orig;
+      |                                        ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:25:9: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   25 |     for(int i=0;i<len;i++){ sx[i]=W/2-i; sy[i]=H/2; }
+      |         ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:25:9: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:42:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   42 |         for(int i=0;i<len;i++) if(sx[i]==nx&&sy[i]==ny){ dead=1; }
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:42:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   44 |         for(int i=len;i>0;i--){ sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:17: error: redefinition of 'i'
+   44 |         for(int i=len;i>0;i--){ sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+      |                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:42:17: note: previous definition is here
+   42 |         for(int i=0;i<len;i++) if(sx[i]==nx&&sy[i]==ny){ dead=1; }
+      |                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:48:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   48 |         for(int y=0;y<H;y++){
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:48:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:49:17: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   49 |             for(int x=0;x<W;x++){
+      |                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:49:17: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:50:33: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   50 |                 int body=0; for(int i=0;i<len;i++) if(sx[i]==x&&sy[i]==y){body=(i==0)?2:1;break;}
+      |                                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:50:33: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:40:13: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   40 |         int nx=sx[0]+dx, ny=sy[0]+dy;
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:24:9: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   24 |     int sx[W*H], sy[W*H], len=4;
+      |         ^
+6 warnings and 10 errors generated.
+[exit=1]
+RESULT clang_ref -std=c89 -pedantic-errors game_a/original/snake.c exit=1
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c -std=c89 --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c89/c89-snake.cplus
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:39: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'sx'
+          for(int i=len;i>0;i--){ sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+                                        ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:54: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'sy'
+          for(int i=len;i>0;i--){ sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+                                                       ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:31:16: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              if(c=='\033'){ char a,b; if(read(0,&a,1)==1&&read(0,&b,1)==1){
+                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:34:22: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='w'||c=='W')&&dy==0){dx=0;dy=-1;}
+                       ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:34:30: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='w'||c=='W')&&dy==0){dx=0;dy=-1;}
+                               ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:32:20: error: [CPLUS-LIFETIME] variable 'b' is uninitialized (read before it is initialized)
+                  if(b=='A'&&dy==0){dx=0;dy=-1;} else if(b=='B'&&dy==0){dx=0;dy=1;}
+                     ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:35:22: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='s'||c=='S')&&dy==0){dx=0;dy=1;}
+                       ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:32:56: error: [CPLUS-LIFETIME] variable 'b' is uninitialized (read before it is initialized)
+                  if(b=='A'&&dy==0){dx=0;dy=-1;} else if(b=='B'&&dy==0){dx=0;dy=1;}
+                                                         ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:35:30: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='s'||c=='S')&&dy==0){dx=0;dy=1;}
+                               ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:33:25: error: [CPLUS-LIFETIME] variable 'b' is uninitialized (read before it is initialized)
+                  else if(b=='C'&&dx==0){dx=1;dy=0;} else if(b=='D'&&dx==0){dx=-1;dy=0;} } }
+                          ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:36:22: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='d'||c=='D')&&dx==0){dx=1;dy=0;}
+                       ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:33:60: error: [CPLUS-LIFETIME] variable 'b' is uninitialized (read before it is initialized)
+                  else if(b=='C'&&dx==0){dx=1;dy=0;} else if(b=='D'&&dx==0){dx=-1;dy=0;} } }
+                                                             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:36:30: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='d'||c=='D')&&dx==0){dx=1;dy=0;}
+                               ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:37:22: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='a'||c=='A')&&dx==0){dx=-1;dy=0;}
+                       ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:37:30: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if((c=='a'||c=='A')&&dx==0){dx=-1;dy=0;}
+                               ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:38:21: error: [CPLUS-LIFETIME] variable 'c' is uninitialized (read before it is initialized)
+              else if(c=='q') dead=1;
+                      ^
+[exit=1]
+RESULT c+ default(Safe) -std=c89 game_a/original/snake.c exit=1
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c --legacy-c -std=c89 -pedantic-errors --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c89/c89-snake.legacy
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:16:40: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   16 |     tcgetattr(0,&orig); struct termios t=orig;
+      |                                        ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:25:9: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   25 |     for(int i=0;i<len;i++){ sx[i]=W/2-i; sy[i]=H/2; }
+      |         ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:25:9: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:42:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   42 |         for(int i=0;i<len;i++) if(sx[i]==nx&&sy[i]==ny){ dead=1; }
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:42:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   44 |         for(int i=len;i>0;i--){ sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:44:17: error: redefinition of 'i'
+   44 |         for(int i=len;i>0;i--){ sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+      |                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:42:17: note: previous definition is here
+   42 |         for(int i=0;i<len;i++) if(sx[i]==nx&&sy[i]==ny){ dead=1; }
+      |                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:48:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   48 |         for(int y=0;y<H;y++){
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:48:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:49:17: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   49 |             for(int x=0;x<W;x++){
+      |                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:49:17: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:50:33: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+   50 |                 int body=0; for(int i=0;i<len;i++) if(sx[i]==x&&sy[i]==y){body=(i==0)?2:1;break;}
+      |                                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:50:33: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:40:13: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   40 |         int nx=sx[0]+dx, ny=sy[0]+dy;
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:62:2: error: no newline at end of file [-Werror,-Wnewline-eof]
+   62 | }
+      |  ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_a/original/snake.c:24:9: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   24 |     int sx[W*H], sy[W*H], len=4;
+      |         ^
+6 warnings and 11 errors generated.
+[exit=1]
+RESULT c+ --legacy-c -std=c89 -pedantic-errors game_a/original/snake.c exit=1
+>>> project: game_b/original/2048.c
+$ /usr/bin/clang -std=c89 -pedantic-errors -fsyntax-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:11:27: error: // comments are not allowed in this language [-Werror,-Wcomment]
+   11 | #define _XOPEN_SOURCE 500 // for: usleep
+      |                           ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:31:24: error: initializer for aggregate is not a compile-time constant [-Werror,-Wc99-extensions]
+   31 |         uint8_t *schemes[] = {original, blackwhite, bluered, whiteblack};
+      |                               ^~~~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:129:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  129 | bool slideArray(uint8_t array[SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:131:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  131 |         bool success = false;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:181:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  181 | bool moveUp(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:183:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  183 |         bool success = false;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:192:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  192 | bool moveLeft(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:194:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  194 |         bool success;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:203:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  203 | bool moveDown(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:205:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  205 |         bool success;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:214:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  214 | bool moveRight(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:216:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  216 |         bool success;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:225:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  225 | bool findPairDown(uint8_t board[SIZE][SIZE])
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:227:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  227 |         bool success = false;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:257:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  257 | bool gameEnded(uint8_t board[SIZE][SIZE])
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:259:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  259 |         bool ended = true;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:275:9: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  275 |         static bool initialized = false;
+      |                ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:323:23: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  323 | void setBufferedInput(bool enable)
+      |                       ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:325:9: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  325 |         static bool enabled = true;
+      |                ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+[exit=1]
+RESULT clang_ref -std=c89 -pedantic-errors game_b/original/2048.c exit=1
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c -std=c89 --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c89/c89-2048.cplus
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:72:23: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+  				uint32_t number = 1 << board[x][y];
+                        ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:152:16: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+  					*score += 1 << array[t];
+                 ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:301:7: warning: [CPLUS-ARITH] remainder by zero
+  		r = rand() % len;
+        ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:433:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+  	printf("         TERMINATED         \n");
+   ^~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:436:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+  	printf("\033[?25h\033[m");
+   ^~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:451:14: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+               ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:451:44: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+                                             ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:463:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0)
+                    ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:463:49: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0)
+                                                  ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:468:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "blackwhite") == 0)
+                    ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:472:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "bluered") == 0)
+                    ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:476:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "whiteblack") == 0)
+                    ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:480:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "test") == 0)
+                    ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:486:72: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  			printf("Invalid option: %s\n\nTry '%s --help' for more options.\n", argv[1], argv[0]);
+                                                                         ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:486:81: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  			printf("Invalid option: %s\n\nTry '%s --help' for more options.\n", argv[1], argv[0]);
+                                                                                  ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:61:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:61:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:69:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:69:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:86:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:86:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+[exit=1]
+RESULT c+ default(Safe) -std=c89 game_b/original/2048.c exit=1
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c --legacy-c -std=c89 -pedantic-errors --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c89/c89-2048.legacy
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:11:27: error: // comments are not allowed in this language [-Werror,-Wcomment]
+   11 | #define _XOPEN_SOURCE 500 // for: usleep
+      |                           ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:31:24: error: initializer for aggregate is not a compile-time constant [-Werror,-Wc99-extensions]
+   31 |         uint8_t *schemes[] = {original, blackwhite, bluered, whiteblack};
+      |                               ^~~~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:129:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  129 | bool slideArray(uint8_t array[SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:131:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  131 |         bool success = false;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:181:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  181 | bool moveUp(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:183:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  183 |         bool success = false;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:192:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  192 | bool moveLeft(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:194:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  194 |         bool success;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:203:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  203 | bool moveDown(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:205:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  205 |         bool success;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:214:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  214 | bool moveRight(uint8_t board[SIZE][SIZE], uint32_t *score)
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:216:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  216 |         bool success;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:225:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  225 | bool findPairDown(uint8_t board[SIZE][SIZE])
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:227:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  227 |         bool success = false;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:257:1: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  257 | bool gameEnded(uint8_t board[SIZE][SIZE])
+      | ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:259:2: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  259 |         bool ended = true;
+      |         ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:275:9: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  275 |         static bool initialized = false;
+      |                ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:323:23: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  323 | void setBufferedInput(bool enable)
+      |                       ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/game_b/original/2048.c:325:9: error: '_Bool' is a C99 extension [-Werror,-Wc99-extensions]
+  325 |         static bool enabled = true;
+      |                ^
+/Library/Developer/CommandLineTools/usr/lib/clang/16/include/stdbool.h:20:14: note: expanded from macro 'bool'
+   20 | #define bool _Bool
+      |              ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+[exit=1]
+RESULT c+ --legacy-c -std=c89 -pedantic-errors game_b/original/2048.c exit=1
+>>> project: cli_app/original/xdump.c
+$ /usr/bin/clang -std=c89 -pedantic-errors -fsyntax-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:14:21: error: variadic macros are a C99 feature [-Werror,-Wvariadic-macros]
+   14 | #define print_error(...) fprintf(stderr, "xdump: " __VA_ARGS__);
+      |                     ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:22:1: error: // comments are not allowed in this language [-Werror,-Wcomment]
+   22 | // XDUMP_COLORS="off=7;bar=7;nul=238;print=7;space=227;ascii=111;nonascii=204"
+      | ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:62:26: error: variable length arrays are a C99 feature [-Werror,-Wvla-extension]
+   62 |     unsigned char buffer[columns_opt];
+      |                          ^~~~~~~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:113:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+  113 |         for(long i = 0; i < columns_opt; i++) {
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:113:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:140:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+  140 |         for(long i = 0; i < columns_opt; i++) {
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:140:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:140:18: error: redefinition of 'i'
+  140 |         for(long i = 0; i < columns_opt; i++) {
+      |                  ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:113:18: note: previous definition is here
+  113 |         for(long i = 0; i < columns_opt; i++) {
+      |                  ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:246:18: error: a function declaration without a prototype is deprecated in all versions of C [-Werror,-Wstrict-prototypes]
+  246 | void display_help() {
+      |                  ^
+      |                   void
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:262:21: error: a function declaration without a prototype is deprecated in all versions of C [-Werror,-Wstrict-prototypes]
+  262 | void display_version() {
+      |                     ^
+      |                      void
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:329:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+  329 |         for(int i = 0; i < argc; i++) {
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:329:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+3 warnings and 9 errors generated.
+[exit=1]
+RESULT clang_ref -std=c89 -pedantic-errors cli_app/original/xdump.c exit=1
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c -std=c89 --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c89/c89-xdump.cplus
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:198:13: warning: [CPLUS-FFI] 'strtok' keeps static state; a second call invalidates earlier results
+      token = strtok(format, ";");
+              ^~~~~~
+help: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:62:26: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc
+      unsigned char buffer[columns_opt];
+                           ^~~~~~~~~~~
+help: use C+ managed allocations and cplus_* helpers
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:53:5: warning: [CPLUS-FFI] format string in vprintf is not a string literal (CWE-134; attacker-controlled format)
+      vprintf(fmt, args);
+      ^~~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:119:20: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+                  if(i % group == 0)
+                     ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:331:30: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+              char *filename = argv[i];
+                               ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:184:29: error: [CPLUS-LIFETIME] variable 'endptr' is uninitialized (read before it is initialized)
+      if(errno != 0 || str == endptr || (code < 0 || code > 255)) {
+                              ^~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:238:29: error: [CPLUS-LIFETIME] variable 'endptr' is uninitialized (read before it is initialized)
+      if(errno != 0 || str == endptr) {
+                              ^~~~~~
+[exit=1]
+RESULT c+ default(Safe) -std=c89 cli_app/original/xdump.c exit=1
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c --legacy-c -std=c89 -pedantic-errors --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c89/c89-xdump.legacy
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:14:21: error: variadic macros are a C99 feature [-Werror,-Wvariadic-macros]
+   14 | #define print_error(...) fprintf(stderr, "xdump: " __VA_ARGS__);
+      |                     ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:22:1: error: // comments are not allowed in this language [-Werror,-Wcomment]
+   22 | // XDUMP_COLORS="off=7;bar=7;nul=238;print=7;space=227;ascii=111;nonascii=204"
+      | ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:62:26: error: variable length arrays are a C99 feature [-Werror,-Wvla-extension]
+   62 |     unsigned char buffer[columns_opt];
+      |                          ^~~~~~~~~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:113:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+  113 |         for(long i = 0; i < columns_opt; i++) {
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:113:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:140:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+  140 |         for(long i = 0; i < columns_opt; i++) {
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:140:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:140:18: error: redefinition of 'i'
+  140 |         for(long i = 0; i < columns_opt; i++) {
+      |                  ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:113:18: note: previous definition is here
+  113 |         for(long i = 0; i < columns_opt; i++) {
+      |                  ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:246:18: error: a function declaration without a prototype is deprecated in all versions of C [-Werror,-Wstrict-prototypes]
+  246 | void display_help() {
+      |                  ^
+      |                   void
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:262:21: error: a function declaration without a prototype is deprecated in all versions of C [-Werror,-Wstrict-prototypes]
+  262 | void display_version() {
+      |                     ^
+      |                      void
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:329:13: error: variable declaration in for loop is a C99-specific feature [-Werror,-Wc99-extensions]
+  329 |         for(int i = 0; i < argc; i++) {
+      |             ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:329:13: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/external_projects/cli_app/original/xdump.c:360:2: error: no newline at end of file [-Werror,-Wnewline-eof]
+  360 | }
+      |  ^
+3 warnings and 10 errors generated.
+[exit=1]
+RESULT c+ --legacy-c -std=c89 -pedantic-errors cli_app/original/xdump.c exit=1
+
+--- 7. Unknown -std spelling ---
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=bogus --sanitize=none -o hello89.bogus
+error: invalid value 'bogus' in '-std=bogus'
+note: use 'c89', 'c90', or 'iso9899:1990' for 'ISO C 1990' standard
+note: use 'iso9899:199409' for 'ISO C 1990 with amendment 1' standard
+note: use 'gnu89' or 'gnu90' for 'ISO C 1990 with GNU extensions' standard
+note: use 'c99' or 'iso9899:1999' for 'ISO C 1999' standard
+note: use 'gnu99' for 'ISO C 1999 with GNU extensions' standard
+note: use 'c11' or 'iso9899:2011' for 'ISO C 2011' standard
+note: use 'gnu11' for 'ISO C 2011 with GNU extensions' standard
+note: use 'c17', 'iso9899:2017', 'c18', or 'iso9899:2018' for 'ISO C 2017' standard
+note: use 'gnu17' or 'gnu18' for 'ISO C 2017 with GNU extensions' standard
+note: use 'c2x' for 'Working Draft for ISO C2x' standard
+note: use 'gnu2x' for 'Working Draft for ISO C2x with GNU extensions' standard
+[exit=1]
+RESULT -std=bogus exit=1 (expected nonzero)
+
+=== end of matrix ===

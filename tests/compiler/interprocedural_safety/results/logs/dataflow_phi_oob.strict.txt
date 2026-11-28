@@ -1,0 +1,8 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:45: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 chosen by conditional expression is out of bounds of 'p' of length 4
+  static void wr(int *p,int c){ int i=c?1:6; p[i]=1; }
+                                              ^
+help: use C+ managed allocations and cplus_* helpers

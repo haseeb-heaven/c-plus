@@ -1,17 +1,301 @@
-/* C+ standard library: convenience I/O built on format-free print/scan. */
+/* C+ standard library: convenience I/O and safe interactive input.
+ *
+ * print()/scan() come from the runtime; this header adds the recoverable,
+ * bounded readers.  Conversion is delegated to libc (strtol, strtoll, strtof,
+ * strtod) - there is no hand-written number parser here.
+ *
+ * Every reader returns STDLIB_OK, STDLIB_EOF or STDLIB_FAIL and fills the
+ * error argument (cleared on success).
+ */
 #ifndef CPLUS_STD_IO_HP
 #define CPLUS_STD_IO_HP
 
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <float.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 
-void println(void) {
-    cplus_log(CPLUS_LOG_TRACE, "println");
+/* Apple SDK <math.h> uses a union whose __u field trips the C+ lifetime
+ * analyzer; keep finite checks local instead (no ABI/symbol change). */
+static inline int stdlib_io_finite(double x) {
+    return x == x && x <= DBL_MAX && x >= -DBL_MAX;
+}
+
+static inline void println(void) {
     print();
 }
 
-void echo_int(int value) {
-    cplus_log(CPLUS_LOG_TRACE, "echo_int value=%d", value);
-    print(value);
+/* Read one whitespace-delimited token into buf (always NUL-terminated).
+ * Returns 0 on success, 1 at end of input, 2 if truncated (stream still
+ * drained to delimiter).  Reads at most size-1 bytes. */
+static inline int stdlib_io_token(char *buf, size_t size) {
+    int c;
+    size_t stored = 0;
+    int overflow = 0;
+    if (buf == NULL || size == 0)
+        return 1;
+    do {
+        c = fgetc(stdin);
+    } while (c != EOF && isspace((unsigned char)c));
+    if (c == EOF)
+        return 1;
+    while (c != EOF && !isspace((unsigned char)c)) {
+        if (stored + 1 < size) {
+            char byte = (char)c;
+            __builtin_memcpy(buf + stored, &byte, sizeof(byte));
+            stored++;
+        } else
+            overflow = 1;
+        c = fgetc(stdin);
+    }
+    {
+        char nul = '\0';
+        __builtin_memcpy(buf + stored, &nul, sizeof(nul));
+    }
+    return overflow ? 2 : 0;
+}
+
+static inline int read_line(char *buf, size_t size, error *err) {
+    error_reset(err);
+    if (buf == NULL || size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "read_line: destination is null or empty");
+        return STDLIB_FAIL;
+    }
+    if (size > (size_t)INT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "read_line: buffer size exceeds INT_MAX");
+        return STDLIB_FAIL;
+    }
+    if (size == 1) {
+        int c = fgetc(stdin);
+        if (c == EOF) {
+            if (feof(stdin))
+                return STDLIB_EOF;
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           "read_line: input stream error");
+            return STDLIB_FAIL;
+        }
+        {
+            char nul = '\0';
+            __builtin_memcpy(buf, &nul, sizeof(nul));
+        }
+        if (c == '\n')
+            return STDLIB_OK;
+        if (c == '\r') {
+            int next = fgetc(stdin);
+            if (next != '\n' && next != EOF)
+                ungetc(next, stdin);
+            return STDLIB_OK;
+        }
+        while (c != EOF && c != '\n')
+            c = fgetc(stdin);
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "read_line: line longer than the buffer");
+        return STDLIB_FAIL;
+    }
+    if (fgets(buf, (int)size, stdin) == NULL) {
+        if (feof(stdin))
+            return STDLIB_EOF;
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "read_line: input stream error");
+        return STDLIB_FAIL;
+    }
+    {
+        size_t n = strlen(buf);
+        /* fgets() stops at size-1 bytes without consuming the delimiter, so a
+         * full buffer alone does not mean the line was too long.  Peek at the
+         * next byte: a line ending (or EOF) means this line fitted exactly;
+         * any other byte means it was truncated.  The remainder is always
+         * drained so the stream stays aligned. */
+        if (n > 0 && n == size - 1) {
+            char last;
+            __builtin_memcpy(&last, buf + n - 1, sizeof(last));
+            if (last != '\n' && !feof(stdin)) {
+                int c = fgetc(stdin);
+                if (c == '\r') {
+                    /* CR is a line ending; mirror the size == 1 path. */
+                    int next = fgetc(stdin);
+                    if (next != '\n' && next != EOF)
+                        ungetc(next, stdin);
+                } else if (c != '\n' && c != EOF) {
+                    /* First byte past the buffer: the line did not fit. */
+                    while (c != EOF && c != '\n')
+                        c = fgetc(stdin);
+                    error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                                   "read_line: line longer than the buffer");
+                    {
+                        char nul = '\0';
+                        __builtin_memcpy(buf, &nul, sizeof(nul));
+                    }
+                    return STDLIB_FAIL;
+                }
+            }
+        }
+        while (n > 0) {
+            char last;
+            __builtin_memcpy(&last, buf + n - 1, sizeof(last));
+            if (last != '\n' && last != '\r')
+                break;
+            --n;
+            {
+                char nul = '\0';
+                __builtin_memcpy(buf + n, &nul, sizeof(nul));
+            }
+        }
+    }
+    return STDLIB_OK;
+}
+
+static inline int read_int(int *out, error *err) {
+    char token[64];
+    char *end;
+    long value;
+    int tok;
+    error_reset(err);
+    if (out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "read_int: destination is null");
+        return STDLIB_FAIL;
+    }
+    tok = stdlib_io_token(token, sizeof(token));
+    if (tok == 1)
+        return STDLIB_EOF;
+    if (tok == 2) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_int: token too long");
+        return STDLIB_FAIL;
+    }
+    end = token;
+    errno = 0;
+    value = strtol(token, &end, 10);
+    if (end == token || *end != '\0') {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_int: not an integer");
+        return STDLIB_FAIL;
+    }
+    if (errno == ERANGE || value < INT_MIN || value > INT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_int: out of range");
+        return STDLIB_FAIL;
+    }
+    *out = (int)value;
+    return STDLIB_OK;
+}
+
+static inline int read_long(long *out, error *err) {
+    char token[64];
+    char *end;
+    long long value;
+    int tok;
+    error_reset(err);
+    if (out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "read_long: destination is null");
+        return STDLIB_FAIL;
+    }
+    tok = stdlib_io_token(token, sizeof(token));
+    if (tok == 1)
+        return STDLIB_EOF;
+    if (tok == 2) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_long: token too long");
+        return STDLIB_FAIL;
+    }
+    end = token;
+    errno = 0;
+    value = strtoll(token, &end, 10);
+    if (end == token || *end != '\0') {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_long: not an integer");
+        return STDLIB_FAIL;
+    }
+    if (errno == ERANGE || value < LONG_MIN || value > LONG_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_long: out of range");
+        return STDLIB_FAIL;
+    }
+    *out = (long)value;
+    return STDLIB_OK;
+}
+
+static inline int read_float(float *out, error *err) {
+    char token[64];
+    char *end;
+    float value;
+    int tok;
+    error_reset(err);
+    if (out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "read_float: destination is null");
+        return STDLIB_FAIL;
+    }
+    tok = stdlib_io_token(token, sizeof(token));
+    if (tok == 1)
+        return STDLIB_EOF;
+    if (tok == 2) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_float: token too long");
+        return STDLIB_FAIL;
+    }
+    end = token;
+    errno = 0;
+    value = strtof(token, &end);
+    if (end == token || *end != '\0') {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_float: not a number");
+        return STDLIB_FAIL;
+    }
+    /* Policy: reject overflow and non-finite values (inf/nan) rather than
+     * letting them propagate silently. */
+    if (errno == ERANGE || !stdlib_io_finite(value)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_float: out of range or not finite");
+        return STDLIB_FAIL;
+    }
+    *out = value;
+    return STDLIB_OK;
+}
+
+static inline int read_double(double *out, error *err) {
+    char token[64];
+    char *end;
+    double value;
+    int tok;
+    error_reset(err);
+    if (out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "read_double: destination is null");
+        return STDLIB_FAIL;
+    }
+    tok = stdlib_io_token(token, sizeof(token));
+    if (tok == 1)
+        return STDLIB_EOF;
+    if (tok == 2) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_double: token too long");
+        return STDLIB_FAIL;
+    }
+    end = token;
+    errno = 0;
+    value = strtod(token, &end);
+    if (end == token || *end != '\0') {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_double: not a number");
+        return STDLIB_FAIL;
+    }
+    if (errno == ERANGE || !stdlib_io_finite(value)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_double: out of range or not finite");
+        return STDLIB_FAIL;
+    }
+    *out = value;
+    return STDLIB_OK;
 }
 
 #endif

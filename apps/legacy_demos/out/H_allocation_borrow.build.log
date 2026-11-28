@@ -1,0 +1,11 @@
+/tmp/resolve2/apps/legacy_demos/H_allocation_borrow.c:24:34: warning: [CPLUS-FFI] format specifies type 'size_t' (aka 'unsigned long') but the argument has type 'int'
+      printf("len=%zu total=%d\n", values.len, sum(borrow, values.len));
+                                   ^~~~~~~~~~
+/tmp/resolve2/apps/legacy_demos/H_allocation_borrow.c:12:18: warning: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe
+          total += p[i];
+                   ^
+/tmp/resolve2/apps/legacy_demos/H_allocation_borrow.c:24:34: warning: format specifies type 'size_t' (aka 'unsigned long') but the argument has type 'int' [-Wformat]
+   24 |     printf("len=%zu total=%d\n", ((4)), sum(borrow, ((4))));
+      |                 ~~~              ^~~~~
+      |                 %d
+1 warning generated.

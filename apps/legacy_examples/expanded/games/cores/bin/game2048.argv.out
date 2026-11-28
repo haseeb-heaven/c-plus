@@ -1,0 +1,42 @@
+GAME2048 seed=0x9E3779B97F4A7C15 moves= 6
+START score=0
+     2    0    0    0
+     0    0    0    0
+     0    0    2    0
+     0    0    0    0
+MOVE 1 R changed=1 gained=0 score=0 spawn=r2c0:2
+     0    0    0    2
+     0    0    0    0
+     2    0    0    2
+     0    0    0    0
+MOVE 2 D changed=1 gained=4 score=4 spawn=r2c3:2
+     0    0    0    0
+     0    0    0    0
+     0    0    0    2
+     2    0    0    4
+MOVE 3 L changed=1 gained=0 score=4 spawn=r1c2:2
+     0    0    0    0
+     0    0    2    0
+     2    0    0    0
+     2    4    0    0
+MOVE 4 U changed=1 gained=4 score=8 spawn=r0c3:2
+     4    4    2    2
+     0    0    0    0
+     0    0    0    0
+     0    0    0    0
+MOVE 5 R changed=1 gained=12 score=20 spawn=r1c0:2
+     0    0    8    4
+     2    0    0    0
+     0    0    0    0
+     0    0    0    0
+MOVE 6 D changed=1 gained=0 score=20 spawn=r0c0:2
+     2    0    0    0
+     0    0    0    0
+     0    0    0    0
+     2    0    8    4
+FINAL score= 20 moves= 6 effective= 6 noops= 0 spawns= 8
+FINAL_BOARD
+     2    0    0    0
+     0    0    0    0
+     0    0    0    0
+     2    0    8    4

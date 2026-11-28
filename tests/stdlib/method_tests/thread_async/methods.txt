@@ -1,0 +1,56 @@
+# PUBLIC-METHOD MANIFEST -- thread_async
+# One line per public callable actually invoked and verified by a .cp case.
+# Format: <header> <method> <PASS|FAIL|SKIP> <test-file>
+# Counts: thread.hp 21/21, async.hp 16/16 (inventory headline 14 + 2
+#         multi-line signatures the inventory parser misses).
+# Grand total: 37 invoked, 37 passed, 0 failed, 0 skipped.
+
+thread.hp mutex.ctor PASS test_thread_methods.cp
+thread.hp mutex.is_valid PASS test_thread_methods.cp
+thread.hp mutex.lock PASS test_thread_methods.cp
+thread.hp mutex.unlock PASS test_thread_methods.cp
+thread.hp mutex.native PASS test_thread_methods.cp
+thread.hp mutex.drop PASS test_thread_methods.cp
+thread.hp guard.ctor PASS test_thread_methods.cp
+thread.hp guard.holds PASS test_thread_methods.cp
+thread.hp guard.unlock PASS test_thread_methods.cp
+thread.hp guard.drop PASS test_thread_methods.cp
+thread.hp condvar.ctor PASS test_thread_methods.cp
+thread.hp condvar.is_valid PASS test_thread_methods.cp
+thread.hp condvar.wait PASS test_thread_methods.cp
+thread.hp condvar.signal PASS test_thread_methods.cp
+thread.hp condvar.broadcast PASS test_thread_methods.cp
+thread.hp condvar.drop PASS test_thread_methods.cp
+thread.hp thread.ctor PASS test_thread_methods.cp
+thread.hp thread.is_joinable PASS test_thread_methods.cp
+thread.hp thread.start PASS test_thread_methods.cp
+thread.hp thread.join PASS test_thread_methods.cp
+thread.hp thread.drop PASS test_thread_methods.cp
+
+async.hp loop.ctor PASS test_async_methods.cp
+async.hp loop.valid PASS test_async_methods.cp
+async.hp loop.native PASS test_async_methods.cp
+async.hp loop.run PASS test_async_methods.cp
+async.hp loop.stop PASS test_async_methods.cp
+async.hp loop.now_ms PASS test_async_methods.cp
+async.hp loop.drop PASS test_async_methods.cp
+async.hp timer.ctor PASS test_async_methods.cp
+async.hp timer.valid PASS test_async_methods.cp
+async.hp timer.start PASS test_async_methods.cp
+async.hp timer.stop PASS test_async_methods.cp
+async.hp timer.is_active PASS test_async_methods.cp
+async.hp timer.drop PASS test_async_methods.cp
+async.hp read_file PASS test_async_methods.cp
+async.hp sleep_ms PASS test_async_methods.cp
+async.hp uv_error_text PASS test_async_methods.cp
+
+# Notes on enumeration
+# - thread.hp: 6 mutex + 4 guard + 6 condvar + 5 thread = 21, matching the
+#   static-inventory count in tests/stdlib/agent2_audit/module_audits/thread.hp.md.
+# - async.hp: the inventory headline is 14 (7 loop + 6 timer + sleep_ms +
+#   uv_error_text).  Its lexical parser misses two multi-line signatures:
+#   timer.start and read_file.  Both are genuine public callables and are
+#   invoked/verified here, so the executed total is 16.
+# - stdlib_timer_release_handle is a stdlib_-prefixed internal close callback;
+#   the inventory excludes it.  It is exercised indirectly by timer.drop()
+#   (uv_close -> drain -> callback frees the heap handle).  Not counted.

@@ -1,0 +1,54 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+00000001000040a4 T ___cplus_bounds_check
+0000000100004630 T ___cplus_checked_add_i64
+0000000100004a4c T ___cplus_checked_div_i64
+00000001000049e8 T ___cplus_checked_mul_i64
+0000000100004f38 T ___cplus_checked_narrow_i64
+0000000100004c18 T ___cplus_checked_rem_i64
+0000000100004c58 T ___cplus_checked_shl_i64
+0000000100004ef8 T ___cplus_checked_shr_i64
+0000000100004988 T ___cplus_checked_sub_i64
+0000000100000000 T __mh_execute_header
+0000000100003d84 T _abi_add_exported
+000000010000c000 D _abi_glob_counter
+0000000100005b0c T _cplus_alloc
+0000000100005c60 T _cplus_alloc_array
+000000010000632c T _cplus_alloc_bytes
+0000000100006438 T _cplus_alloc_count
+0000000100004324 T _cplus_check_bounds
+00000001000064d8 T _cplus_check_index
+0000000100006244 T _cplus_check_live
+0000000100004538 T _cplus_check_nonnull
+0000000100004448 T _cplus_check_ptr_formation
+000000010000415c T _cplus_fatal
+000000010000c050 S _cplus_fatal_hook
+00000001000059c8 T _cplus_free_registered
+0000000100006a18 T _cplus_mutex_free
+0000000100006928 T _cplus_mutex_lock
+0000000100006880 T _cplus_mutex_new
+00000001000069a0 T _cplus_mutex_unlock
+0000000100006fd8 T _cplus_print_end
+0000000100006c40 T _cplus_print_value
+0000000100005e20 T _cplus_realloc
+0000000100005860 T _cplus_realloc_registered
+0000000100005320 T _cplus_register_allocation
+0000000100005f6c T _cplus_release
+0000000100005228 T _cplus_resource_check_borrow
+000000010000c008 D _cplus_runtime_log_level
+0000000100006ffc T _cplus_scan_value
+000000010000675c T _cplus_scope_cleanup
+000000010000664c T _cplus_scope_push
+0000000100006bec T _cplus_tls_free
+0000000100006b10 T _cplus_tls_get
+0000000100006a68 T _cplus_tls_new
+0000000100006b68 T _cplus_tls_set
+0000000100005bec T _cplus_zalloc
+0000000100006180 T _cplus_zero
+0000000100003ed0 T _main
+
+--- stderr ---
+

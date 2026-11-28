@@ -1,0 +1,8 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/cast_extent.c:3:90: error: allocation 'p' leaks on this return path (no matching free)
+help: free/close the resource on every return path, or use a C+ managed allocation
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/cast_extent.c:2:81: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 64 exceeds heap allocation 'q' of 32 bytes
+  int main(void){ int *p=malloc(8*sizeof(int)); if(!p)return 1; char *q=(char*)p; q[64]=1; return q[64]; }
+                                                                                  ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/cast_extent.c:2:97: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 64 exceeds heap allocation 'q' of 32 bytes
+  int main(void){ int *p=malloc(8*sizeof(int)); if(!p)return 1; char *q=(char*)p; q[64]=1; return q[64]; }
+                                                                                                  ^

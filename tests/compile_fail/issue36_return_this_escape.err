@@ -1,0 +1,1 @@
+[CPLUS-LIFETIME] address of local 'b' escapes the function in the returned pointer

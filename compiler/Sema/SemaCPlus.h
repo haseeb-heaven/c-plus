@@ -31,6 +31,7 @@
 #include "Diagnostics.h"
 #include "LangFeatures.h"
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
@@ -62,6 +63,105 @@ struct RewrittenSource {
 /// Rewrite C+ specific syntax into equivalent C syntax annotated for the
 /// later passes.  The rewrite is purely lexical/syntactic and preserves line
 /// numbering so diagnostics stay accurate.
+/// Insert C+ runtime bounds checks around dynamic indices into fixed-size
+/// arrays. Constant indices are left to the static bounds checker.
+std::string instrumentDynamicArrayBounds(
+    const std::string &source,
+    const std::map<std::string, size_t> &arrayLengths);
+
+/// One signed add/sub/mul expression whose operands are not compile-time
+/// constants and therefore needs a native checked-arithmetic call.  Offsets
+/// are byte offsets into the lowered C buffer that checkAstSafety analysed.
+struct CheckedArithmeticSite {
+  enum class Op : unsigned char {
+    Add, Sub, Mul, Div, Rem, Shl, Shr,
+    Narrow,      ///< integer conversion that may truncate or change sign
+    FloatToInt,  ///< floating -> integer conversion (range / NaN check)
+    AllocExtent, ///< size multiplication for an allocation extent
+    Inc, Dec,    ///< ++ / -- (lvalue update; see `postfix`)
+    Neg          ///< unary minus (checked 0 - operand)
+  };
+  size_t begin = 0;  ///< offset of the expression's first token
+  size_t op = 0;     ///< offset of the operator token (0-length for implicit
+                     ///< conversions)
+  size_t end = 0;    ///< offset one past the expression's last token
+  size_t opLength = 1;
+  Op kind = Op::Add;
+  std::string type;    ///< canonical C spelling of the result type
+  unsigned bits = 0;   ///< width of the result/left operand type (1..64)
+  bool isSigned = true;///< signedness of the source expression type
+  // Conversion-only fields.
+  unsigned srcBits = 0;       ///< source integer width (0 for arithmetic)
+  bool srcIsSigned = true;    ///< source signedness
+  std::string srcType;        ///< canonical source type spelling
+
+  // Syntactic-form hints.  All default to the legacy (plain binary / value)
+  // behaviour so older producers keep working.  The rewriter also derives
+  // these from the source operator text, so producers may simply record a
+  // plain Op::Add/Sub/... at a `+=`/`++`/unary-`-` token and it is still
+  // emitted as an lvalue-preserving guard.
+  bool compound = false; ///< `+=`, `-=`, ... : preserve the lvalue update
+  bool postfix = false;  ///< `a++`/`a--` (false => `++a`/`--a`)
+  // AllocExtent-only fields.  When non-empty these are used verbatim;
+  // otherwise the rewriter splits [begin,op)/[op+opLength,end).
+  std::string countExpr; ///< element count expression (e.g. "n")
+  std::string elemExpr;  ///< element size expression (e.g. "sizeof(int)")
+};
+
+/// A pointer + integer operation whose extent is provable at compile time.
+struct CheckedPointerSite {
+  size_t begin = 0;    ///< byte offset of the whole expression
+  size_t end = 0;      ///< one past the whole expression
+  size_t op = 0;       ///< offset of the '+' / '-' / '+=' / '-=' token
+  size_t opLength = 1; ///< length of that token
+  std::string base;    ///< source spelling of the pointer operand
+  std::string index;   ///< source spelling of the integer operand
+  std::string count;   ///< provable element count of the base object
+  bool negative = false; ///< BO_Sub / -= : index is subtracted
+  bool compound = false; ///< `p += off` / `p -= off` (lvalue update required)
+  bool deref = false;    ///< true: require index < count (one-past is invalid),
+                         ///< false: require index <= count (formation only)
+  std::string expr;    ///< source spelling of the whole expression
+};
+
+void setCheckedPointerSites(std::vector<CheckedPointerSite> sites);
+const std::vector<CheckedPointerSite> &checkedPointerSites();
+
+/// A resolved array/pointer subscript whose base extent was proved by the AST
+/// pass (cast aliases, struct/union fields, multidim row pointers, interior
+/// pointers, typedef aliases, etc.).  The rewriter wraps the index in place
+/// with __cplus_bounds_check, so the index expression is evaluated once.
+struct CheckedBoundsSite {
+  size_t indexBegin = 0; ///< byte offset of the index expression's first token
+  size_t indexEnd = 0;   ///< one past the index expression's last token
+  size_t close = 0;      ///< offset of the closing ']' token (0 => indexEnd)
+  std::string count;     ///< provable element count (C expression text)
+  std::string name;      ///< symbol name used in the runtime diagnostic
+};
+
+void setCheckedBoundsSites(std::vector<CheckedBoundsSite> sites);
+const std::vector<CheckedBoundsSite> &checkedBoundsSites();
+
+/// An allocator/free call that the source instrumenter should route through
+/// the C+ runtime side table.  Pointer representation is never changed.
+struct CheckedAllocSite {
+  size_t begin = 0;
+  size_t end = 0;
+  unsigned long long bytes = 0;
+  std::string argText;
+  bool isRealloc = false;
+};
+void setCheckedAllocSites(std::vector<CheckedAllocSite> sites);
+const std::vector<CheckedAllocSite> &checkedAllocSites();
+void setCheckedFreeSites(std::vector<CheckedAllocSite> sites);
+const std::vector<CheckedAllocSite> &checkedFreeSites();
+
+/// Hand the sites found by checkAstSafety() to the source instrumenter.  The
+/// driver calls checkAstSafety() before instrumentDynamicArrayBounds() for
+/// every translation unit, so the registry is replaced for each TU.
+void setCheckedArithmeticSites(std::vector<CheckedArithmeticSite> sites);
+const std::vector<CheckedArithmeticSite> &checkedArithmeticSites();
+
 RewrittenSource rewriteCPlusSyntax(const std::string &source,
                                    DiagnosticEngine &diags,
                                    const std::string &filename);
@@ -76,7 +176,10 @@ struct FrontendOptions {
   std::vector<std::string> extraArgs;
   std::string sysroot;
   std::string stdVersion = "c17";
-  bool warningsAsErrors = false;
+  // Issue #34: same default policy as the driver entry point. --legacy-c is
+  // the explicit opt-out unless -Werror was requested explicitly.
+  bool warningsAsErrors = true;
+  bool warningsAsErrorsExplicit = false;
   bool verbose = false;
 };
 

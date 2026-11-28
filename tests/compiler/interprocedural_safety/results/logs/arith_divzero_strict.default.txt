@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:1:32: warning: [CPLUS-ARITH] division by zero
+  int main(void){ int z=0; int x=10/z; return x; }
+                                 ^~

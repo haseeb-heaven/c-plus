@@ -6,7 +6,32 @@
 #define CLOG_H
 
 #include <stdarg.h>
+#ifdef __cplusplus
+// libstdc++'s <stdatomic.h> does not always expose the C11 convenience
+// typedefs/functions in C++ mode. Provide a small compatibility shim so this
+// header compiles with both C and C++ backends (Linux CI exposed the gap).
+#include <atomic>
+using clog_atomic_bool = std::atomic<bool>;
+using clog_atomic_flag = std::atomic_flag;
+inline bool clog_atomic_load(const clog_atomic_bool *v) { return v->load(); }
+inline void clog_atomic_store(clog_atomic_bool *v, bool x) { v->store(x); }
+inline bool clog_atomic_cas(clog_atomic_bool *v, bool *expected, bool desired) {
+  return v->compare_exchange_strong(*expected, desired);
+}
+inline void clog_atomic_flag_clear(clog_atomic_flag *f) { f->clear(); }
+inline bool clog_atomic_flag_test_and_set(clog_atomic_flag *f) {
+  return f->test_and_set();
+}
+#define atomic_bool clog_atomic_bool
+#define atomic_flag clog_atomic_flag
+#define atomic_load(v) clog_atomic_load(v)
+#define atomic_store(v, x) clog_atomic_store(v, x)
+#define atomic_compare_exchange_strong(v, e, d) clog_atomic_cas(v, e, d)
+#define atomic_flag_clear(v) clog_atomic_flag_clear(v)
+#define atomic_flag_test_and_set(v) clog_atomic_flag_test_and_set(v)
+#else
 #include <stdatomic.h>
+#endif
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>

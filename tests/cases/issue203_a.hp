@@ -1,0 +1,5 @@
+#ifndef ISSUE203_A_HP
+#define ISSUE203_A_HP
+#include "issue203_b.hp"
+class Issue203A { int value; int get(void){ return this->value; } };
+#endif

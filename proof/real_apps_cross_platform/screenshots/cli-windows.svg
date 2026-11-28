@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1387" height="1112" viewBox="0 0 1387 1112">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">cli (windows)</text>
+  <text class="sub" x="84" y="48">CLI command registry / bounded argument parsing app  |  exit=0</text>
+  <text class="sub" x="84" y="68">run: PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout -k 5 90 highball run -v /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/proof/real_...</text>
+  <rect y="84" width="100%" height="970" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">CLI_TEST begin</text>
+  <text class="body" xml:space="preserve" x="20" y="134">CHECK init PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="156">CHECK add_cmd PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="178">CHECK add_opt PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="200">CHECK dup_cmd PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="222">CHECK dup_opt PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="244">CHECK long_name PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="266">CHECK long_help PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="288">CHECK null_args PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="310">CHECK bad_option_name PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="332">CHECK uninit PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="354">CHECK registry_full PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="376">CHECK parse_ok PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="398">PARSE command=add id=1 found=1 options=2 args=2</text>
+  <text class="body" xml:space="preserve" x="20" y="420">OPT 0 --verbose has_value=0 value=</text>
+  <text class="body" xml:space="preserve" x="20" y="442">OPT 1 --count has_value=1 value=3</text>
+  <text class="body" xml:space="preserve" x="20" y="464">ARG 0 10</text>
+  <text class="body" xml:space="preserve" x="20" y="486">ARG 1 20</text>
+  <text class="body" xml:space="preserve" x="20" y="508">CHECK dispatch PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="530">CHECK dispatch_refusal PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="552">CHECK help_exact PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="574">HELP_BEGIN</text>
+  <text class="body" xml:space="preserve" x="20" y="596">Commands:</text>
+  <text class="body" xml:space="preserve" x="20" y="618">add - add two numbers (id=1)</text>
+  <text class="body" xml:space="preserve" x="20" y="640">greet - greet a name (id=2)</text>
+  <text class="body" xml:space="preserve" x="20" y="662">Options:</text>
+  <text class="body" xml:space="preserve" x="20" y="684">--count=value</text>
+  <text class="body" xml:space="preserve" x="20" y="706">--verbose</text>
+  <text class="body" xml:space="preserve" x="20" y="728"></text>
+  <text class="body" xml:space="preserve" x="20" y="750">HELP_END</text>
+  <text class="body" xml:space="preserve" x="20" y="772">CHECK help_bounds PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="794">CHECK unknown_option PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="816">CHECK unknown_command PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="838">CHECK no_command PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="860">CHECK too_many_args PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="882">CHECK bare_dash PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="904">CHECK flag_value PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="926">CHECK value_missing PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="948">CHECK oversized_token PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="970">CHECK null_token PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="992">CHECK negative_argc PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="1014">CHECK error_strings PASS</text>
+  <text class="body" xml:space="preserve" x="20" y="1036">CLI_TEST 27 27 0</text>
+  <rect y="1054" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="1076">Verbatim captured terminal output for cli on windows — evidence for the recorded host/toolchain only; not a memory-safety proof.</text>
+  <text class="disclaimer" x="20" y="1096">rendered terminal output from a real captured run — not a fabricated GUI capture</text>
+  <desc>Verbatim captured output:
+    CLI_TEST begin
+    CHECK init PASS
+    CHECK add_cmd PASS
+    CHECK add_opt PASS
+    CHECK dup_cmd PASS
+    CHECK dup_opt PASS
+    CHECK long_name PASS
+    CHECK long_help PASS
+    CHECK null_args PASS
+    CHECK bad_option_name PASS
+    CHECK uninit PASS
+    CHECK registry_full PASS
+    CHECK parse_ok PASS
+    PARSE command=add id=1 found=1 options=2 args=2
+    OPT 0 --verbose has_value=0 value=
+    OPT 1 --count has_value=1 value=3
+    ARG 0 10
+    ARG 1 20
+    CHECK dispatch PASS
+    CHECK dispatch_refusal PASS
+    CHECK help_exact PASS
+    HELP_BEGIN
+    Commands:
+      add - add two numbers (id=1)
+      greet - greet a name (id=2)
+    Options:
+      --count=value
+      --verbose
+    
+    HELP_END
+    CHECK help_bounds PASS
+    CHECK unknown_option PASS
+    CHECK unknown_command PASS
+    CHECK no_command PASS
+    CHECK too_many_args PASS
+    CHECK bare_dash PASS
+    CHECK flag_value PASS
+    CHECK value_missing PASS
+    CHECK oversized_token PASS
+    CHECK null_token PASS
+    CHECK negative_argc PASS
+    CHECK error_strings PASS
+    CLI_TEST 27 27 0
+    [toolchain: real Windows PE via Highball / Wine engine x64-crossover26.3-r27 (-v verbose required)]
+  </desc>
+</svg>

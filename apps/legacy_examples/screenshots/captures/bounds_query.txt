@@ -1,0 +1,21 @@
+# CAPTURED TERMINAL TRANSCRIPT: bounds_query.txt
+# TITLE: Bounds query: stdlib_mem_span_ok/stdlib_mem_query refuse a one-over span and a stale-generation key (STDLIB_CATEGORY_BOUNDS / LIFECYCLE)
+# CAPTURED_AT_UTC: 2026-11-23T06:29:41Z
+# TOOLCHAIN: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin
+# CWD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+# NOTE: everything between BEGIN/END markers is verbatim stdout+stderr
+#       of a real binary executed under /usr/bin/timeout 30.
+# BUILD CMD: ./build/c+ build examples/expanded/safety/bounds_demo.cp --strict --sanitize=none -I. -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/bounds_demo"
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/bounds_demo
+# --- BEGIN VERBATIM OUTPUT ---
+bounds exact_fit OK cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1
+bounds one_over REFUSED span_1over=0 span_tail=0 query=-1 bounds_cat=1
+bounds interior_pointer OK interior_has_metadata=0 contains_24=1 contains_25=0
+bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# TOKEN_OK: bounds exact_fit OK cap=16
+# TOKEN_OK: bounds one_over REFUSED span_1over=0 span_tail=0 query=-1 bounds_cat=1
+# TOKEN_OK: bounds interior_pointer OK interior_has_metadata=0 contains_24=1 contains_25=0
+# TOKEN_OK: bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1
+# VERDICT: PASS -- every expected refusal token was found in real captured output

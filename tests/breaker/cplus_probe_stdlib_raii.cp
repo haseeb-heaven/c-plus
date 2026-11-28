@@ -1,8 +1,8 @@
 #include "stdlib/string.hp"
 #include "stdlib/vector.hp"
 int main(void) {
-  String s = String("hello");
-  IntVec v = IntVec();
-  for (auto i = 0; i < 20; i++) v.push(i * i);
-  return s.len() == 5 && s.at(1) == 'e' && v.len() == 20 && v.at(19) == 361 ? 0 : 1;
+  string s = string("hello");
+  vector v = vector();
+  for (auto i = 0; i < 20; i++) v.push_back(i * i);
+  return s.size() == 5 && s.at(1) == 'e' && v.size() == 20 && v.at(19) == 361 ? 0 : 1;
 }

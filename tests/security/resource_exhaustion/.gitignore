@@ -1,0 +1,2 @@
+# Bounded runner output (binaries, logs, JSON) is regenerable, never a fixture.
+.reout/

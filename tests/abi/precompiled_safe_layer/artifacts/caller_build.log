@@ -1,0 +1,42 @@
+=== caller builds + run against the SAME saved archive ===
+date_utc=2026-11-24T05:18:34Z
+baseline_sha256(libsafe_layer.a)=2be1e47b9d227fd045d7453b9b2e12d7a840992bba2c11adfd37a2291be1bf58
+safecrt=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a sha256=c801bdace1c96cec53ba4283e9e2873df01e04168a1cf2c3c7cc4281a1c6b150
+hardened=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a sha256=db82ff337dab1930058c4e50df101458d47b9aa6eadeb3f20ede4e075b07bd7c
+=========================================
+PRE-BUILD sha256(libsafe_layer.a)=2be1e47b9d227fd045d7453b9b2e12d7a840992bba2c11adfd37a2291be1bf58
+CMD[build_plain]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/safe_layer_app.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/app_plain
+RC[build_plain]=0
+--- stdout[build_plain] ---
+--- stderr[build_plain] ---
+CMD[build_safe]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/stdlib/safe -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/safeclib/include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/intel-safestringlib/include -include stdlib/safe/safe_c.h /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/safe_layer_app.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a -lm -pthread -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/app_safe
+RC[build_safe]=0
+--- stdout[build_safe] ---
+--- stderr[build_safe] ---
+CMD[build_negative]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/stdlib/safe -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/safeclib/include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/intel-safestringlib/include -include stdlib/safe/safe_c.h /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/safe_layer_negative.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a -lm -pthread -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/negative_safe
+RC[build_negative]=0
+--- stdout[build_negative] ---
+--- stderr[build_negative] ---
+POST-BUILD sha256(libsafe_layer.a)=2be1e47b9d227fd045d7453b9b2e12d7a840992bba2c11adfd37a2291be1bf58
+RUN[app_plain] rc=0
+--- stdout[app_plain] ---
+app: version=3
+app: mul=440
+app: checksum=36
+app: label=precompiled-ok
+app: END
+--- stderr[app_plain] ---
+RUN[app_safe] rc=0
+--- stdout[app_safe] ---
+app: version=3
+app: mul=440
+app: checksum=36
+app: label=precompiled-ok
+app: END
+--- stderr[app_safe] ---
+RUN[negative_safe] rc=70
+--- stdout[negative_safe] ---
+negative: lib_version=3 lib_mul=42
+negative: valid_write=ok small0=A
+--- stderr[negative_safe] ---
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 64 > capacity 8, ESNOSPC 406)

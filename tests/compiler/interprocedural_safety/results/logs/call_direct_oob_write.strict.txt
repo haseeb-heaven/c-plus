@@ -1,0 +1,7 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_direct_oob_write.c
+returncode: 1
+timed_out: False
+
+<SRC>:3:25: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 exceeds heap allocation 'p' of 16 bytes
+  static void wr(int *p){ p[6]=9; }
+                          ^

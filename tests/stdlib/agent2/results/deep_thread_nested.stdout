@@ -1,0 +1,13 @@
+valid 1
+nested_outer_holds 1
+nested_inner_holds 1
+inner_released 1
+outer_released 1
+seq_inner_holds 1
+seq_released 1
+cross_acquire_holds 1
+cross_release_holds 0
+cross_relock 1
+child_rc 0
+deadlock_detector 1
+SELF_CHECK_OK

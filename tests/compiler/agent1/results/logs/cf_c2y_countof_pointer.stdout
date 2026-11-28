@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_c2y_countof_pointer.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/c2y_countof_pointer.c:2:34: error: static assertion failed due to requirement '!__builtin_types_compatible_p(int *, int *)': countof requires an array, not a pointer

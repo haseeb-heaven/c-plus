@@ -1,0 +1,6 @@
+SCOPED_MODERN ops 20000
+SCOPED_MODERN bump_ns_per_op 23
+SCOPED_MODERN heap_ns_per_op 206
+SCOPED_MODERN modern_ns_per_op 146
+SCOPED_MODERN ratio_ge_2 yes
+SCOPED_MODERN_OK

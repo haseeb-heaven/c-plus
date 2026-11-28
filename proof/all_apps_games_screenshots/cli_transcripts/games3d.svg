@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420"><rect width='100%' height='100%' fill='#0d1117'/><text x='16' y='30' fill='#58a6ff' font-size='18'>C+ proof: games3d</text>
+<text x='16' y='56' fill='#c9d1d9' font-family='monospace' font-size='12'>BUILD ok scene3d_demo</text>
+<text x='16' y='72' fill='#c9d1d9' font-family='monospace' font-size='12'>ok built-in run exited 0 with empty stderr</text>
+<text x='16' y='88' fill='#c9d1d9' font-family='monospace' font-size='12'>ok exact stdout matches expected/transcript.expected</text>
+<text x='16' y='104' fill='#c9d1d9' font-family='monospace' font-size='12'>ok two runs are byte-identical (deterministic)</text>
+<text x='16' y='120' fill='#c9d1d9' font-family='monospace' font-size='12'>ok checksum line: CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40</text>
+<text x='16' y='136' fill='#c9d1d9' font-family='monospace' font-size='12'>EXTERNAL_CKSUM 456015415 1903</text>
+<text x='16' y='152' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_NONFINITE (rc=2) args=NAN</text>
+<text x='16' y='168' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_NONFINITE (rc=2) args=INF</text>
+<text x='16' y='184' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_INDEX (rc=2) args=INDEX 8</text>
+<text x='16' y='200' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_INDEX (rc=2) args=INDEX 999999</text>
+<text x='16' y='216' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_INDEX (rc=2) args=INDEX -1</text>
+<text x='16' y='232' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_BOUNDS (rc=2) args=NODE 9</text>
+<text x='16' y='248' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_INDEX (rc=2) args=DEGENERATE</text>
+<text x='16' y='264' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_CYCLE (rc=2) args=CYCLE</text>
+<text x='16' y='280' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_PARSE (rc=2) args=PARSE 12x</text>
+<text x='16' y='296' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_PARSE (rc=2) args=BOGUS</text>
+<text x='16' y='312' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_PARSE (rc=2) args=INDEX</text>
+<text x='16' y='328' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_PARSE (rc=2) args=NODE</text>
+<text x='16' y='344' fill='#c9d1d9' font-family='monospace' font-size='12'>ok refusal E_PARSE (rc=2) args=PARSE</text>
+<text x='16' y='360' fill='#c9d1d9' font-family='monospace' font-size='12'>SCENE3D 1 4 0 13</text>
+</svg>

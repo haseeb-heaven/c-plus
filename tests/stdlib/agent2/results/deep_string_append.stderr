@@ -1,0 +1,2 @@
+C+ runtime error: double free: managed memory released twice
+C+ runtime error: dangling pointer: pointer is no longer a live C+ allocation

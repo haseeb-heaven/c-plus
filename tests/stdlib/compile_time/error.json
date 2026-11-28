@@ -1,0 +1,39 @@
+{
+  "header": "stdlib/error.hp",
+  "commands": {
+    "check": "c+ check --strict <file>",
+    "build": "c+ build --strict --sanitize=none <file> -o <out>"
+  },
+  "cases": [
+    {
+      "file": "error_use_after_reset.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: error_reset()/clear() leave the lightweight error object valid, and the compiler tracks no reset-state, so a stale-state misuse compiles cleanly (check rc=0, build rc=0, no [CPLUS- diagnostic]). The pattern is memory-safe here because reset clears fields; cover stale-state expectations in a runtime/behavioral test."
+    },
+    {
+      "file": "error_invalid_lifecycle.cp",
+      "expect": "REJECT",
+      "observed": "REJECT",
+      "note": "Heap error slot released with cplus_release() then read via slot->failed. Both commands fail with [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: member access through released pointer. Residual gap: method-call sugar on a released error* lowers to a free function call and is NOT checked (probe: cplus_release(e); e->ok() compiles)."
+    },
+    {
+      "file": "error_null_pointer.cp",
+      "expect": "REJECT",
+      "observed": "REJECT",
+      "note": "error_reset(NULL) is contract-valid, but dereferencing a null error* via slot->failed is contract-invalid. Both commands fail with [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference. Residual gap: method calls on a null error* (e.g. e->ok()) lower to free function calls and are NOT caught; direct member access is."
+    },
+    {
+      "file": "error_valid.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: construct, set(), set_category(), read ok()/failed_now()/code()/category()/what(). check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0."
+    },
+    {
+      "file": "error_valid_reset.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: set(), clear(), error_reset(&e), error_fail(&e,...) followed by state assertions. check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0."
+    }
+  ]
+}

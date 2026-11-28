@@ -1,0 +1,70 @@
+# methods.txt — public-callable manifest for stdlib/json.hp, stdlib/log.hp, stdlib/time.hp
+# Format: <header> <method> <PASS|FAIL>
+# Every callable declared in the three headers is listed, including constructors
+# and void-returning functions (their observable side effects are verified).
+# Source of truth: the three headers as checked in on branch agent/modern-stdlib.
+
+# ---- stdlib/json.hp : 34 callables ---------------------------------------
+json json_input_within_budget PASS
+json json_parse_budget PASS
+json json_parse_file PASS
+json json_view_of PASS
+json json_free PASS
+json json_view::json_view PASS
+json json_view::valid PASS
+json json_view::is_object PASS
+json json_view::is_array PASS
+json json_view::is_number PASS
+json json_view::is_string PASS
+json json_view::is_bool PASS
+json json_view::get_int PASS
+json json_view::get_double PASS
+json json_view::get_bool PASS
+json json_view::get_string PASS
+json json_view::size PASS
+json json_view::at PASS
+json json_view::member PASS
+json json_view::write PASS
+json json::json PASS
+json json::valid PASS
+json json::read_size PASS
+json json::value_count PASS
+json json::root PASS
+json json::drop PASS
+json json_builder::json_builder PASS
+json json_builder::valid PASS
+json json_builder::add_int PASS
+json json_builder::add_double PASS
+json json_builder::add_bool PASS
+json json_builder::add_string PASS
+json json_builder::write PASS
+json json_builder::drop PASS
+
+# ---- stdlib/log.hp : 16 callables ----------------------------------------
+log log_level_name PASS
+log log_level_parse PASS
+log log_open_file PASS
+log log_stderr PASS
+log log_stdout PASS
+log log_sink::log_sink PASS
+log log_sink::valid PASS
+log log_sink::native PASS
+log log_sink::level PASS
+log log_sink::set_level PASS
+log log_sink::enabled PASS
+log log_sink::write PASS
+log log_sink::info PASS
+log log_sink::warn PASS
+log log_sink::failure PASS
+log log_sink::drop PASS
+
+# ---- stdlib/time.hp : 6 callables ----------------------------------------
+time time_now_ns PASS
+time time_now_ms PASS
+time time_monotonic_ns PASS
+time time_monotonic_ms PASS
+time time_sleep_ms PASS
+time time_format_iso8601 PASS
+
+# ---- totals --------------------------------------------------------------
+# total=56 passed=56 failed=0 skipped=0

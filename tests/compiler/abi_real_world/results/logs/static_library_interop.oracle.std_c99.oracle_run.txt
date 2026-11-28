@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.oracle_std_c99.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+lib=42,2.5,6,7.0,cb=9
+
+--- stderr ---
+

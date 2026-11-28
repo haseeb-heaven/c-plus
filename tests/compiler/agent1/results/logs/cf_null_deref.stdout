@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_null_deref.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/null_deref.c:7:20: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference

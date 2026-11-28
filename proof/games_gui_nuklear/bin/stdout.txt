@@ -1,0 +1,4 @@
+SNAKE steps=8 score=9 high=1
+MAZE slot=0 pos=(2,1) frames=2
+NUKLEAR_UI widgets=12 scratch_bytes=384 rewound=1
+GAME_SUITE_OK

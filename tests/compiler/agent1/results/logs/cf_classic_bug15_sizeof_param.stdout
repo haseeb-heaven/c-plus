@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug15_sizeof_param.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug15_sizeof_param.c:4:26: error: sizeof on array function parameter will return size of 'int *' instead of 'int[10]' [-Werror,-Wsizeof-array-argument]

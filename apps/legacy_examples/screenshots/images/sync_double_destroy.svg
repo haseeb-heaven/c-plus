@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1354" height="254" viewBox="0 0 1354 254">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">sync_demo  |  checked destroy / join double-use refusal</text>
+  <text class="sub" x="84" y="48">/usr/bin/clang -std=c99 -D_POSIX_C_SOURCE=200809L -I. -Ilibc/install-include sync_demo.c build/libc/libcplus_hardened.a -pthread  |  timeout 30 ./sync_demo</text>
+  <text class="sub" x="84" y="68">toolchain: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin</text>
+  <rect y="84" width="100%" height="112" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">sync mtx_destroy <tspan class="refused">REFUSED</tspan> init_destroy=0 double=22 (EINVAL=22)</text>
+  <text class="body" xml:space="preserve" x="20" y="134">sync cnd_destroy <tspan class="refused">REFUSED</tspan> init_destroy=0 double=22 (EINVAL=22)</text>
+  <text class="body" xml:space="preserve" x="20" y="156">sync thrd_join <tspan class="refused">REFUSED</tspan> join=0 result=42 double=22 (EINVAL=22)</text>
+  <text class="body" xml:space="preserve" x="20" y="178">sync null_handles <tspan class="refused">REFUSED</tspan> mtx_NULL=22 cnd_NULL=22 thrd_zero=22 (EINVAL=22)</text>
+  <rect y="196" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="218">cplus_mtx_destroy_checked, cplus_cnd_destroy_checked and cplus_thrd_join_checked return EINVAL (22) on second use and on NULL/all-zero handles.</text>
+  <text class="disclaimer" x="20" y="238">captured real output — evidence, not proof</text>
+  <desc>Verbatim captured output:
+    sync mtx_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+    sync cnd_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+    sync thrd_join REFUSED join=0 result=42 double=22 (EINVAL=22)
+    sync null_handles REFUSED mtx_NULL=22 cnd_NULL=22 thrd_zero=22 (EINVAL=22)
+  </desc>
+</svg>

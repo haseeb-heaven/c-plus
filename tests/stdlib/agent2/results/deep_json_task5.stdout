@@ -1,0 +1,25 @@
+json_empty_input 1
+json_whitespace_input 1
+json_truncated_object 1
+json_unmatched_bracket 1
+json_trailing_comma_obj 1
+json_trailing_comma_arr 1
+json_bad_escape 1
+json_duplicate_keys 1
+json_embedded_nul_complete_prefix 1
+json_embedded_nul_incomplete_prefix 1
+json_double_i64max 1
+json_double_i64min 1
+json_double_u64max 1
+json_double_denorm_min 1
+json_double_denorm_neg 1
+json_double_1e308 1
+json_null_text 1
+json_null_err_and_write_args 1
+json_view_of_null 1
+json_builder_null_err_args 1
+json_dropped_doc_views 1
+json_dropped_builder_triple 1
+json_alloc_failure_hook 1
+SKIP_REASON json_alloc_failure_hook json.hp passes a NULL yyjson_alc to yyjson_read_opts() and yyjson_mut_doc_new(); yyjson's allocator is per-call with no global hook and json.hp exposes no allocator setter. stdlib_alloc_fail_at/after therefore cannot reach yyjson allocations, so no honest OOM test can be fabricated here (see DEEP_JSON_CONTRACT.md section 3).
+JSON_TASK5 23 0

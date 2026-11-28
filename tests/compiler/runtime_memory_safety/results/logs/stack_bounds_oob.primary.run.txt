@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_oob.primary.bin
+returncode: -6
+timed_out: False
+
+C+ error: index 7 is outside the bounds of 'a' (length 4)

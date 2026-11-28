@@ -1,0 +1,5 @@
+In file included from /tmp/resolve3/proof/modern_c_ports/bst.c:3:
+/tmp/resolve3/proof/modern_c_ports/common.h:15:12: warning: unused function 'cmp_int' [-Wunused-function]
+   15 | static int cmp_int(const void *a, const void *b) {
+      |            ^~~~~~~
+1 warning generated.

@@ -23,7 +23,7 @@ c+_lang/
 │   ├── io.hp
 │   └── net.hp
 ├── tests/               # positive, compile-fail, runtime-fail, known gaps
-├── demos/               # A..P demonstration programs (.c and .cp)
+├── apps/legacy_demos/               # A..P demonstration programs (.c and .cp)
 ├── benchmarks/          # reproducible comparisons against clang -O2
 ├── docs/                # language, architecture, audit, status, roadmap
 └── tools/               # build/verification scripts

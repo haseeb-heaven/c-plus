@@ -1,0 +1,12 @@
+case: rot13
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/rot13.generated.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/rot13.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/rot13.cplus
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/rot13.c:24:10: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+   24 |     for (int i = 0; s[i]; i++) {
+      |          ^
+1 warning generated.
+

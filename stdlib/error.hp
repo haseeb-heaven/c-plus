@@ -1,0 +1,759 @@
+/* C+ standard library: recoverable errors, telemetry and the checked allocator.
+ *
+ * C++-flavoured surface without C++ exceptions: an `error` value carries a
+ * status code, a stable category and a message, and library calls report
+ * through it.  Nothing in this header terminates the process; fatal safety
+ * violations stay the runtime's job (cplus_fatal).
+ *
+ * `error_reset` / `error_fail` are free helpers as well as being what the
+ * methods call, so they also work inside class methods, where method-call
+ * sugar on parameters is not applied.
+ *
+ * Checked allocator (one allocation model for every .hp container)
+ * ----------------------------------------------------------------
+ * Containers allocate ONLY through stdlib_alloc / stdlib_calloc and release
+ * ONLY through stdlib_release.  These wrap the C+ managed allocator
+ * (cplus_alloc / cplus_release), so double release and invalid release are
+ * still detected by the runtime, and add:
+ *   - NULL on failure instead of a fatal exit (recoverable),
+ *   - overflow-safe sizes and a hard request limit (STDLIB_ALLOC_LIMIT),
+ *   - allocation-failure injection for tests,
+ *   - opt-in telemetry.
+ * Never hand a stdlib_alloc block to raw free(), and never hand a raw malloc()
+ * block to stdlib_release (the runtime would report an invalid free).
+ *
+ * Telemetry is OFF by default, in-process only (nothing is transmitted), never
+ * records buffer contents, and is diagnostic information, not proof of safety.
+ * All counters are atomic.  The shared state is a weak definition so every
+ * translation unit that includes this header sees the same counters.
+ */
+#ifndef CPLUS_STD_ERROR_HP
+#define CPLUS_STD_ERROR_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include "cplus/cplus.h"
+
+#define STDLIB_OK 0    /* success                     */
+#define STDLIB_EOF 1   /* end of input, not a failure */
+#define STDLIB_FAIL -1 /* failure; see the error      */
+
+/* Stable, ABI-friendly error categories.  EOF is signalled by the STDLIB_EOF
+ * return value rather than an error record. */
+#define STDLIB_CATEGORY_OK 0
+#define STDLIB_CATEGORY_INVALID 1
+#define STDLIB_CATEGORY_RANGE 2
+#define STDLIB_CATEGORY_IO 3
+#define STDLIB_CATEGORY_MEMORY 4
+#define STDLIB_CATEGORY_BOUNDS 5
+#define STDLIB_CATEGORY_OWNERSHIP 6
+#define STDLIB_CATEGORY_LIFECYCLE 7
+#define STDLIB_CATEGORY_UTF8 8
+
+#define STDLIB_ERROR_SIZE 256
+
+/* Largest single allocation the checked allocator will attempt.  Requests above
+ * it are refused with NULL (a recoverable error) rather than being passed to
+ * an allocator that would certainly fail and, for cplus_alloc, terminate the
+ * process.  Override with -DSTDLIB_ALLOC_LIMIT=... */
+#ifndef STDLIB_ALLOC_LIMIT
+#if SIZE_MAX > 0xffffffffu
+#define STDLIB_ALLOC_LIMIT ((size_t)1 << 40)
+#else
+#define STDLIB_ALLOC_LIMIT ((size_t)(SIZE_MAX >> 1))
+#endif
+#endif
+
+/* ---- telemetry --------------------------------------------------------- */
+
+#define STDLIB_TM_ALLOC 0
+#define STDLIB_TM_FREE 1
+#define STDLIB_TM_BYTES 2
+#define STDLIB_TM_ALLOC_FAIL 3
+#define STDLIB_TM_INVALID 4
+#define STDLIB_TM_BOUNDS 5
+#define STDLIB_TM_OWNERSHIP 6
+#define STDLIB_TM_LIFECYCLE 7
+#define STDLIB_TM_GROWTH 8
+#define STDLIB_TM_API_FAIL 9
+#define STDLIB_TM_COUNT 10
+
+typedef struct stdlib_telemetry_stats {
+    unsigned long long alloc_count;
+    unsigned long long free_count;
+    unsigned long long bytes_allocated;
+    unsigned long long alloc_failures;
+    unsigned long long invalid_ops;
+    unsigned long long bounds_violations;
+    unsigned long long ownership_violations;
+    unsigned long long lifecycle_failures;
+    unsigned long long container_growths;
+    unsigned long long api_failures;
+} stdlib_telemetry_stats;
+
+/* Optional diagnostics hook.  Receives only the category, the exit code and a
+ * static message - never buffer contents.  A per-thread re-entrancy guard
+ * drops reports raised from inside the callback. */
+typedef void (*stdlib_error_callback)(int category, cplus_exit_code code,
+                                      const char *message);
+
+typedef struct stdlib_meta_slot {
+    const void *ptr;
+    size_t byte_size;
+    size_t elem_size;
+    unsigned long long generation;
+} stdlib_meta_slot;
+
+typedef struct stdlib_state_t {
+    int telemetry_enabled;
+    long fail_at;            /* 0 off; else the n-th allocation fails once   */
+    long fail_from;          /* 0 off; else allocation n and later fail      */
+    long seq;                /* allocation attempts since the last reset      */
+    stdlib_error_callback callback;
+    unsigned long long counters[STDLIB_TM_COUNT];
+    int meta_lock;
+    stdlib_meta_slot *meta_tab;
+    size_t meta_cap;
+    size_t meta_used;
+    size_t meta_live;
+    unsigned long long meta_gen;
+} stdlib_state_t;
+
+/* Weak definition: one shared instance per program, no link-time collision. */
+__attribute__((weak)) stdlib_state_t stdlib_state;
+
+static inline void stdlib_tm_add(int index, unsigned long long amount) {
+    if (__atomic_load_n(&stdlib_state.telemetry_enabled, __ATOMIC_RELAXED))
+        __atomic_fetch_add(&stdlib_state.counters[index], amount,
+                           __ATOMIC_RELAXED);
+}
+
+static inline void stdlib_telemetry_set_enabled(int enabled) {
+    __atomic_store_n(&stdlib_state.telemetry_enabled, enabled ? 1 : 0,
+                     __ATOMIC_RELAXED);
+}
+
+static inline int stdlib_telemetry_is_enabled(void) {
+    return __atomic_load_n(&stdlib_state.telemetry_enabled, __ATOMIC_RELAXED);
+}
+
+static inline void stdlib_telemetry_reset(void) {
+    int i;
+    for (i = 0; i < STDLIB_TM_COUNT; i++)
+        __atomic_store_n(&stdlib_state.counters[i], 0ULL, __ATOMIC_RELAXED);
+}
+
+static inline void stdlib_telemetry_snapshot(stdlib_telemetry_stats *out) {
+    if (out == NULL)
+        return;
+    out->alloc_count = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_ALLOC], __ATOMIC_RELAXED);
+    out->free_count = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_FREE], __ATOMIC_RELAXED);
+    out->bytes_allocated = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_BYTES], __ATOMIC_RELAXED);
+    out->alloc_failures = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_ALLOC_FAIL], __ATOMIC_RELAXED);
+    out->invalid_ops = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_INVALID], __ATOMIC_RELAXED);
+    out->bounds_violations = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_BOUNDS], __ATOMIC_RELAXED);
+    out->ownership_violations = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_OWNERSHIP], __ATOMIC_RELAXED);
+    out->lifecycle_failures = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_LIFECYCLE], __ATOMIC_RELAXED);
+    out->container_growths = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_GROWTH], __ATOMIC_RELAXED);
+    out->api_failures = __atomic_load_n(&stdlib_state.counters[STDLIB_TM_API_FAIL], __ATOMIC_RELAXED);
+}
+
+static inline void stdlib_set_error_callback(stdlib_error_callback callback) {
+    __atomic_store_n(&stdlib_state.callback, callback, __ATOMIC_RELEASE);
+}
+
+static inline const char *stdlib_category_name(int category) {
+    switch (category) {
+    case STDLIB_CATEGORY_OK:
+        return "ok";
+    case STDLIB_CATEGORY_INVALID:
+        return "invalid";
+    case STDLIB_CATEGORY_RANGE:
+        return "range";
+    case STDLIB_CATEGORY_IO:
+        return "io";
+    case STDLIB_CATEGORY_MEMORY:
+        return "memory";
+    case STDLIB_CATEGORY_BOUNDS:
+        return "bounds";
+    case STDLIB_CATEGORY_OWNERSHIP:
+        return "ownership";
+    case STDLIB_CATEGORY_LIFECYCLE:
+        return "lifecycle";
+    case STDLIB_CATEGORY_UTF8:
+        return "utf8";
+    default:
+        return "unknown";
+    }
+}
+
+/* Shared per-thread re-entrancy guard for the error callback.  A `static`
+ * local inside a static inline function would give every translation unit its
+ * own copy, so a callback installed in one TU could recurse when the nested
+ * failure is raised from another TU.  A weak file-scope TLS definition is
+ * merged into one guard per thread per program. */
+__attribute__((weak)) __thread int stdlib_error_reporting;
+
+/* Record a failure: counters first, then the optional callback.  Allocates
+ * nothing, formats nothing, and drops re-entrant reports. */
+static inline void stdlib_note(int category, cplus_exit_code code,
+                               const char *message) {
+    stdlib_error_callback callback;
+    switch (category) {
+    case STDLIB_CATEGORY_MEMORY:
+        stdlib_tm_add(STDLIB_TM_ALLOC_FAIL, 1);
+        break;
+    case STDLIB_CATEGORY_BOUNDS:
+        stdlib_tm_add(STDLIB_TM_BOUNDS, 1);
+        break;
+    case STDLIB_CATEGORY_OWNERSHIP:
+        stdlib_tm_add(STDLIB_TM_OWNERSHIP, 1);
+        break;
+    case STDLIB_CATEGORY_LIFECYCLE:
+        stdlib_tm_add(STDLIB_TM_LIFECYCLE, 1);
+        break;
+    default:
+        stdlib_tm_add(STDLIB_TM_INVALID, 1);
+        break;
+    }
+    stdlib_tm_add(STDLIB_TM_API_FAIL, 1);
+    callback = __atomic_load_n(&stdlib_state.callback, __ATOMIC_ACQUIRE);
+    if (callback != NULL && !stdlib_error_reporting) {
+        stdlib_error_reporting = 1;
+        callback(category, code, message != NULL ? message : "");
+        stdlib_error_reporting = 0;
+    }
+}
+
+/* ---- checked allocator ------------------------------------------------- */
+
+/* Test aid: the n-th allocation from now (1-based) fails once. */
+static inline void stdlib_alloc_fail_at(long n) {
+    __atomic_store_n(&stdlib_state.seq, 0L, __ATOMIC_RELAXED);
+    __atomic_store_n(&stdlib_state.fail_from, 0L, __ATOMIC_RELAXED);
+    __atomic_store_n(&stdlib_state.fail_at, n > 0 ? n : 0L, __ATOMIC_RELAXED);
+}
+
+/* Test aid: n allocations succeed, every later one fails until reset. */
+static inline void stdlib_alloc_fail_after(long n) {
+    __atomic_store_n(&stdlib_state.seq, 0L, __ATOMIC_RELAXED);
+    __atomic_store_n(&stdlib_state.fail_at, 0L, __ATOMIC_RELAXED);
+    __atomic_store_n(&stdlib_state.fail_from, n >= 0 ? n + 1 : 0L,
+                     __ATOMIC_RELAXED);
+}
+
+static inline void stdlib_alloc_fail_reset(void) {
+    __atomic_store_n(&stdlib_state.fail_at, 0L, __ATOMIC_RELAXED);
+    __atomic_store_n(&stdlib_state.fail_from, 0L, __ATOMIC_RELAXED);
+    __atomic_store_n(&stdlib_state.seq, 0L, __ATOMIC_RELAXED);
+}
+
+/* Allocation attempts since the last fail_at/fail_after/reset call; lets a
+ * test enumerate every allocation point of an operation. */
+static inline long stdlib_alloc_seq(void) {
+    return __atomic_load_n(&stdlib_state.seq, __ATOMIC_RELAXED);
+}
+
+/* Weak shared definition: every translation unit must use the SAME tombstone
+ * address.  A `static` sentinel gave each TU a different address, so a
+ * tombstone written by one TU was copied into a rehashed table as a live key
+ * by another, eventually filling meta_tab and stopping all recording. */
+__attribute__((weak)) const char stdlib_meta_tomb_sentinel = 0;
+#define STDLIB_META_TOMB ((const void *)&stdlib_meta_tomb_sentinel)
+
+static inline void stdlib_meta_acquire(void) {
+    while (__atomic_exchange_n(&stdlib_state.meta_lock, 1, __ATOMIC_ACQUIRE) != 0) {
+    }
+}
+
+static inline void stdlib_meta_release_lock(void) {
+    __atomic_store_n(&stdlib_state.meta_lock, 0, __ATOMIC_RELEASE);
+}
+
+static inline size_t stdlib_meta_hash(const void *p) {
+    uintptr_t x = (uintptr_t)p;
+    x ^= x >> 33;
+    x *= (uintptr_t)0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    return (size_t)x;
+}
+
+/* Test seam for out-of-memory injection.  The metadata table grows with raw
+ * calloc(), which the checked-allocator fail_at/fail_from knobs do not reach.
+ * A NULL hook (the default) uses the real allocator; tests install a function
+ * that returns NULL to exercise the OOM path deterministically.  Weak so every
+ * translation unit that includes this header shares the same hook. */
+typedef void *(*stdlib_meta_calloc_fn)(size_t count, size_t size);
+__attribute__((weak)) stdlib_meta_calloc_fn stdlib_meta_calloc_hook;
+
+static inline void stdlib_meta_set_calloc_hook(stdlib_meta_calloc_fn fn) {
+    __atomic_store_n(&stdlib_meta_calloc_hook, fn, __ATOMIC_RELEASE);
+}
+
+static inline void *stdlib_meta_calloc(size_t count, size_t size) {
+    stdlib_meta_calloc_fn fn =
+        __atomic_load_n(&stdlib_meta_calloc_hook, __ATOMIC_ACQUIRE);
+    return fn != (stdlib_meta_calloc_fn)0 ? fn(count, size) : calloc(count, size);
+}
+
+static inline stdlib_meta_slot *stdlib_meta_find(const void *p) {
+    size_t mask, i, n;
+    if (stdlib_state.meta_cap == 0 || p == NULL || p == STDLIB_META_TOMB)
+        return NULL;
+    mask = stdlib_state.meta_cap - 1u;
+    i = stdlib_meta_hash(p) & mask;
+    for (n = 0; n < stdlib_state.meta_cap; ++n) {
+        if (stdlib_state.meta_tab[i].ptr == p)
+            return &stdlib_state.meta_tab[i];
+        if (stdlib_state.meta_tab[i].ptr == NULL)
+            return NULL;
+        i = (i + 1u) & mask;
+    }
+    return NULL;
+}
+
+static inline void stdlib_meta_record(const void *p, size_t byte_size,
+                                      size_t elem_size) {
+    size_t mask, i, n;
+    stdlib_meta_slot *existing;
+    int recorded = 0;
+    if (p == NULL)
+        return;
+    if (elem_size == 0)
+        elem_size = 1u;
+    stdlib_meta_acquire();
+    /* Load factor threshold without the overflow-prone (used+1)*4 > cap*3.
+     * cap is always a power of two, so cap>>2 is exactly cap/4. */
+    if (stdlib_state.meta_cap == 0 ||
+        stdlib_state.meta_used + 1u >
+            stdlib_state.meta_cap - (stdlib_state.meta_cap >> 2u)) {
+        size_t ncap = stdlib_state.meta_cap ? stdlib_state.meta_cap : 64u;
+        size_t k;
+        stdlib_meta_slot *fresh;
+        if (stdlib_state.meta_cap != 0 &&
+            stdlib_state.meta_live * 2u >= stdlib_state.meta_cap &&
+            ncap <= SIZE_MAX / 4u / sizeof(stdlib_meta_slot))
+            ncap = stdlib_state.meta_cap * 2u;
+        /* Never rehash into a table of the same size: its probe loop cannot
+         * make progress once the old table is dense. */
+        if (ncap > stdlib_state.meta_cap) {
+            fresh = (stdlib_meta_slot *)stdlib_meta_calloc(
+                ncap, sizeof(stdlib_meta_slot));
+            if (fresh != NULL) {
+                for (k = 0; k < stdlib_state.meta_cap; ++k) {
+                    const void *kp = stdlib_state.meta_tab[k].ptr;
+                    if (kp != NULL && kp != STDLIB_META_TOMB) {
+                        size_t j = stdlib_meta_hash(kp) & (ncap - 1u);
+                        for (n = 0; n < ncap; ++n) {
+                            if (fresh[j].ptr == NULL) {
+                                fresh[j] = stdlib_state.meta_tab[k];
+                                break;
+                            }
+                            j = (j + 1u) & (ncap - 1u);
+                        }
+                    }
+                }
+                free(stdlib_state.meta_tab);
+                stdlib_state.meta_tab = fresh;
+                stdlib_state.meta_cap = ncap;
+                stdlib_state.meta_used = stdlib_state.meta_live;
+            }
+        }
+    }
+    if (stdlib_state.meta_cap != 0) {
+        existing = stdlib_meta_find(p);
+        if (existing != NULL) {
+            existing->byte_size = byte_size;
+            existing->elem_size = elem_size;
+            existing->generation = ++stdlib_state.meta_gen;
+            recorded = 1;
+        } else {
+            mask = stdlib_state.meta_cap - 1u;
+            i = stdlib_meta_hash(p) & mask;
+            /* Bounded probing is essential: on OOM the table can be completely
+             * full, and an unbounded loop here held meta_lock forever. */
+            for (n = 0; n < stdlib_state.meta_cap; ++n) {
+                if (stdlib_state.meta_tab[i].ptr == NULL ||
+                    stdlib_state.meta_tab[i].ptr == STDLIB_META_TOMB)
+                    break;
+                i = (i + 1u) & mask;
+            }
+            if (n < stdlib_state.meta_cap) {
+                if (stdlib_state.meta_tab[i].ptr == NULL)
+                    ++stdlib_state.meta_used;
+                stdlib_state.meta_tab[i].ptr = p;
+                stdlib_state.meta_tab[i].byte_size = byte_size;
+                stdlib_state.meta_tab[i].elem_size = elem_size;
+                stdlib_state.meta_tab[i].generation = ++stdlib_state.meta_gen;
+                ++stdlib_state.meta_live;
+                recorded = 1;
+            }
+        }
+    }
+    /* Release the spinlock on EVERY exit, including OOM and a full table. */
+    stdlib_meta_release_lock();
+    if (!recorded)
+        stdlib_note(STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                    "metadata table: out of memory, block not recorded");
+}
+
+static inline void stdlib_meta_forget(const void *p) {
+    stdlib_meta_slot *s;
+    if (p == NULL)
+        return;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(p);
+    if (s != NULL) {
+        s->ptr = STDLIB_META_TOMB;
+        s->byte_size = 0;
+        s->elem_size = 0;
+        s->generation = 0;
+        --stdlib_state.meta_live;
+    }
+    stdlib_meta_release_lock();
+}
+
+/* NULL on failure (limit exceeded, injected, or the allocator refused). */
+static inline void *stdlib_alloc(size_t bytes) {
+    long seq;
+    long at;
+    long from;
+    void *p;
+    if (bytes == 0)
+        bytes = 1;
+    if (bytes > STDLIB_ALLOC_LIMIT) {
+        stdlib_note(STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                    "allocation request exceeds STDLIB_ALLOC_LIMIT");
+        return NULL;
+    }
+    seq = __atomic_add_fetch(&stdlib_state.seq, 1L, __ATOMIC_RELAXED);
+    at = __atomic_load_n(&stdlib_state.fail_at, __ATOMIC_RELAXED);
+    from = __atomic_load_n(&stdlib_state.fail_from, __ATOMIC_RELAXED);
+    if ((at != 0 && seq == at) || (from != 0 && seq >= from)) {
+        stdlib_note(STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                    "allocation failure (injected)");
+        return NULL;
+    }
+    p = cplus_alloc(bytes);
+    if (p != NULL) {
+        stdlib_meta_record(p, bytes, 1u);
+        stdlib_tm_add(STDLIB_TM_ALLOC, 1);
+        stdlib_tm_add(STDLIB_TM_BYTES, (unsigned long long)bytes);
+    }
+    return p;
+}
+
+/* Zeroed array allocation; the count*size product is overflow-checked. */
+static inline void *stdlib_calloc(size_t count, size_t element_size) {
+    void *p;
+    size_t total = 0;
+    size_t elem;
+    /* Multiplication overflow check avoids variable division entirely. */
+    if (__builtin_mul_overflow(count, element_size, &total) ||
+        total > STDLIB_ALLOC_LIMIT) {
+        stdlib_note(STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                    "allocation size overflow");
+        return NULL;
+    }
+    total = (count == 0 || element_size == 0) ? 1u : count * element_size;
+    elem = element_size > 0 ? element_size : 1u;
+    p = stdlib_alloc(total);
+    if (p != NULL) {
+        memset(p, 0, total);
+        stdlib_meta_record(p, total, elem);
+    }
+    return p;
+}
+
+/* Resize a stdlib_alloc block while keeping the checked side table in sync.
+ * Unlike a raw cplus_realloc() call, a successful resize retires the OLD
+ * allocation identity and records the new address/size; a failed resize
+ * leaves the original block and its metadata completely untouched.
+ * Failure-atomic: on -1/NULL nothing in the table or the caller's state
+ * changes.  Zero-size requests map to one backing byte, like stdlib_alloc. */
+static inline void *stdlib_realloc(void *ptr, size_t bytes) {
+    size_t actual = bytes == 0 ? 1u : bytes;
+    size_t elem = 1u;
+    void *fresh;
+    size_t old_actual = 0;
+    if (actual > STDLIB_ALLOC_LIMIT) {
+        stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                    "stdlib_realloc: request exceeds STDLIB_ALLOC_LIMIT");
+        return NULL;
+    }
+    if (ptr == NULL)
+        return stdlib_alloc(bytes);
+    {
+        stdlib_meta_slot *s;
+        stdlib_meta_acquire();
+        s = stdlib_meta_find(ptr);
+        if (s == NULL) {
+            stdlib_meta_release_lock();
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "stdlib_realloc: pointer is not a live stdlib block");
+            return NULL;
+        }
+        elem = s->elem_size ? s->elem_size : 1u;
+        old_actual = s->byte_size;
+        stdlib_meta_release_lock();
+    }
+    /* Allocate-copy-release instead of cplus_realloc: the strict alias
+     * checker cannot prove the old pointer safe after a realloc call, and
+     * stdlib/error.hp is included by nearly every .hp header. Semantics are
+     * identical for callers (new buffer, old contents, old block released). */
+    fresh = cplus_alloc(actual);
+    if (fresh == NULL)
+        return NULL;
+    memcpy(fresh, ptr, old_actual < actual ? old_actual : actual);
+    stdlib_meta_forget(ptr);
+    cplus_release(ptr);
+    /* stdlib_meta_record bumps the generation even for an in-place resize,
+     * so stale generation tokens are refused after a successful call. */
+    stdlib_meta_record(fresh, actual, elem);
+    stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+    return fresh;
+}
+
+/* Division helper without variable division/remainder operators: the strict
+ * checker rejects divisions whose divisor cannot be proven non-zero. This
+ * shift-and-subtract form is exact across the FULL size_t range (not just
+ * 16-bit quotients): iterate from the highest bit down to 0. */
+static inline size_t stdlib_safe_div(size_t a, size_t b) {
+    size_t q = 0, r = a;
+    int sh;
+    if (b == 0)
+        return 0;
+    for (sh = (int)(sizeof(size_t) * 8u) - 1; sh >= 0; --sh) {
+        size_t d = (size_t)1 << sh;
+        if (b <= (SIZE_MAX >> sh)) {
+            size_t v = b << sh;
+            if (r >= v) { r -= v; q += d; }
+        }
+    }
+    return q;
+}
+
+/* Safe length-query and ownership-transfer helpers for stdlib_alloc blocks. */
+static inline size_t stdlib_alloc_size(const void *ptr) {
+    size_t n = 0;
+    stdlib_meta_slot *s;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL)
+        n = s->byte_size;
+    stdlib_meta_release_lock();
+    return n;
+}
+
+static inline size_t stdlib_alloc_elem_size(const void *ptr) {
+    size_t n = 0;
+    stdlib_meta_slot *s;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL)
+        n = s->elem_size;
+    stdlib_meta_release_lock();
+    return n;
+}
+
+static inline size_t stdlib_alloc_length(const void *ptr) {
+    size_t n = 0;
+    stdlib_meta_slot *s;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL) {
+        size_t es = s->elem_size ? s->elem_size : 1u;
+        if (es > 0)
+            n = stdlib_safe_div(s->byte_size, es);
+    }
+    stdlib_meta_release_lock();
+    return n;
+}
+
+static inline unsigned long long stdlib_alloc_generation(const void *ptr) {
+    unsigned long long g = 0;
+    stdlib_meta_slot *s;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL)
+        g = s->generation;
+    stdlib_meta_release_lock();
+    return g;
+}
+
+static inline int stdlib_alloc_check_generation(const void *ptr,
+                                                unsigned long long gen) {
+    int ok = 0;
+    stdlib_meta_slot *s;
+    if (ptr == NULL || gen == 0)
+        return 0;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL && s->generation == gen)
+        ok = 1;
+    stdlib_meta_release_lock();
+    return ok;
+}
+
+static inline int stdlib_alloc_query_length(const void *ptr, size_t elem_size,
+                                            size_t *out_count) {
+    stdlib_meta_slot *s;
+    int ok = 0;
+    if (out_count != NULL)
+        *out_count = 0;
+    if (ptr == NULL || out_count == NULL)
+        return -1;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL) {
+        size_t es = elem_size > 0 ? elem_size : (s->elem_size ? s->elem_size : 1u);
+        if (es > 0)
+            *out_count = stdlib_safe_div(s->byte_size, es);
+        ok = 1;
+    }
+    stdlib_meta_release_lock();
+    return ok ? 0 : -1;
+}
+
+static inline int stdlib_transfer_ownership(void **dst, void **src) {
+    stdlib_meta_slot *s;
+    if (dst == NULL || src == NULL || *src == NULL || *dst != NULL ||
+        dst == src) {
+        stdlib_note(STDLIB_CATEGORY_OWNERSHIP, CPLUS_EXIT_OWNERSHIP,
+                    "stdlib_transfer_ownership: invalid handles");
+        return -1;
+    }
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(*src);
+    if (s == NULL) {
+        stdlib_meta_release_lock();
+        stdlib_note(STDLIB_CATEGORY_OWNERSHIP, CPLUS_EXIT_OWNERSHIP,
+                    "stdlib_transfer_ownership: source is not a live block");
+        return -1;
+    }
+    s->generation = ++stdlib_state.meta_gen;
+    *dst = *src;
+    *src = NULL;
+    stdlib_meta_release_lock();
+    return 0;
+}
+
+/* Release a stdlib_alloc block.  NULL is a no-op. */
+static inline void stdlib_release(void *ptr) {
+    if (ptr == NULL)
+        return;
+    stdlib_meta_forget(ptr);
+    stdlib_tm_add(STDLIB_TM_FREE, 1);
+    cplus_release(ptr);
+}
+
+static inline void error_reset(void *target);
+static inline void error_fail(void *target, cplus_exit_code code,
+                              const char *message);
+static inline void error_fail_cat(void *target, int category,
+                                  cplus_exit_code code, const char *message);
+
+class error {
+    int failed;
+    int kind;
+    cplus_exit_code status;
+    char text[STDLIB_ERROR_SIZE];
+
+    error(void) {
+        this->failed = 0;
+        this->kind = STDLIB_CATEGORY_OK;
+        this->status = CPLUS_EXIT_OK;
+        this->text[0] = '\0';
+    }
+
+    int ok(void) {
+        return !this->failed;
+    }
+
+    int failed_now(void) {
+        return this->failed;
+    }
+
+    int code(void) {
+        return (int)this->status;
+    }
+
+    const char *what(void) {
+        return this->text;
+    }
+
+    /* Stable category recorded when the error was set, so callers never have
+     * to interpret cplus_exit_code themselves. */
+    int category(void) {
+        return this->failed ? this->kind : STDLIB_CATEGORY_OK;
+    }
+
+    void clear(void) {
+        error_reset(this);
+    }
+
+    void set(cplus_exit_code code_value, const char *message) {
+        error_fail(this, code_value, message);
+    }
+
+    void set_category(int category, cplus_exit_code code_value,
+                      const char *message) {
+        error_fail_cat(this, category, code_value, message);
+    }
+};
+
+static inline void error_reset(void *target) {
+    error *slot = (error *)target;
+    if (slot == NULL)
+        return;
+    slot->failed = 0;
+    slot->kind = STDLIB_CATEGORY_OK;
+    slot->status = CPLUS_EXIT_OK;
+    slot->text[0] = '\0';
+}
+
+static inline void error_fail(void *target, cplus_exit_code code,
+                              const char *message) {
+    int category = STDLIB_CATEGORY_INVALID;
+    if (code == CPLUS_EXIT_IO)
+        category = STDLIB_CATEGORY_IO;
+    else if (code == CPLUS_EXIT_RESOURCE)
+        category = STDLIB_CATEGORY_MEMORY;
+    else if (code == CPLUS_EXIT_BOUNDS)
+        category = STDLIB_CATEGORY_BOUNDS;
+    else if (code == CPLUS_EXIT_OWNERSHIP)
+        category = STDLIB_CATEGORY_OWNERSHIP;
+    else if (code == CPLUS_EXIT_USE_AFTER_FREE || code == CPLUS_EXIT_DOUBLE_FREE)
+        category = STDLIB_CATEGORY_LIFECYCLE;
+    error_fail_cat(target, category, code, message);
+}
+
+static inline void error_fail_cat(void *target, int category,
+                                  cplus_exit_code code, const char *message) {
+    error *slot = (error *)target;
+    /* Capture the message into the error record BEFORE invoking the callback:
+     * a callback that mutates the caller's message buffer must not rewrite the
+     * record (RED-20 E3).  The callback sees the stable copy in slot->text. */
+    if (slot != NULL) {
+        size_t n;
+        slot->failed = 1;
+        slot->kind = category;
+        slot->status = code;
+        if (message != NULL) {
+            n = strlen(message);
+            if (n > STDLIB_ERROR_SIZE - 1u) n = STDLIB_ERROR_SIZE - 1u;
+            __builtin_memcpy(slot->text, message, n);
+            slot->text[n] = '\0';
+        } else {
+            slot->text[0] = '\0';
+            n = 0;
+        }
+        stdlib_note(category, code, slot->text);
+    } else {
+        stdlib_note(category, code, message);
+    }
+}
+
+#endif

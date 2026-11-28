@@ -1,0 +1,3 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/core/positive/uaf_conditional.c:2:93: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] possible use-after-free: 'p' may have been released on a branch path
+  int main(int argc,char**argv){ int *p=malloc(sizeof(int)); *p=0; if(argc>1) free(p); return *p; }  // NOSONAR intentional safe-mode safety fixture; initialise so the accepted branch returns deterministically on every libc
+                                                                                              ^

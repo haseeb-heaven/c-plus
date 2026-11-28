@@ -1,0 +1,7 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:27: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds stack array 'p' of 16 bytes
+  int first(int *p){ return p[4]; }
+                            ^

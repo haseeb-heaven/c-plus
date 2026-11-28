@@ -1,0 +1,4 @@
+TGREP 1 foo bar baz
+TGREP matches 1
+TGREP 1 foo bar baz
+TGREP matches 1

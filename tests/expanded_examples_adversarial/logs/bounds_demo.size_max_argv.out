@@ -1,0 +1,4 @@
+bounds exact_fit OK cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1
+bounds one_over REFUSED span_1over=0 span_tail=0 query=-1 bounds_cat=1
+bounds interior_pointer OK interior_has_metadata=0 contains_24=1 contains_25=0
+bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1

@@ -1,0 +1,123 @@
+{
+  "task": "P1 Thread-safety analysis — prevent data races",
+  "handoff": "subagent 1 of 12 (branch agent/modern-stdlib)",
+  "directory": "tests/stdlib/agent1_handoff/thread_safety",
+  "ownership": "Only files under this directory were created/modified; no git add/commit; no compiler/runtime/header/test-runner edits.",
+  "execution_safety": "No binary from these cases was built or run. All four .cp files were only passed to `c+ check` (lower/type-check, no executable written, no race executed).",
+  "environment": {
+    "cwd": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib",
+    "tool": "./build/c+",
+    "version_output": "C+ 0.1.0\nLanguage: C+ (C with memory safety, deterministic RAII, lightweight classes)\nBackend: host Clang/LLVM",
+    "version_exit": 0,
+    "backend": "/usr/bin/clang",
+    "sanitizer_value_validation": {
+      "command": "./build/c+ check --strict --sanitize=bogus <file>",
+      "output": "error: invalid sanitizer 'bogus' (expected none|address|undefined|memory|thread|leak|cfi|integer)",
+      "exit": 1,
+      "meaning": "'thread' is a recognised CLI sanitizer value, not an ignored typo."
+    }
+  },
+  "commands": {
+    "per_case_strict_check": "./build/c+ check --strict tests/stdlib/agent1_handoff/thread_safety/<case>.cp",
+    "thread_check_probe": "./build/c+ check --strict --sanitize=thread <case>",
+    "thread_build_probe": "./build/c+ build --strict --sanitize=thread <case> -o /dev/null",
+    "note": "thread_build_probe was compile-only (output /dev/null); the produced binary was never run."
+  },
+  "cases": [
+    {
+      "file": "race_shared_vector.cp",
+      "header": "stdlib/thread.hp",
+      "shape": "two threads call vector::push_back on one shared vector with no guard",
+      "expect": "REJECT (ideal: static data-race detection)",
+      "observed": "ACCEPT",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/thread_safety/race_shared_vector.cp ok",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "classification": "CAPABILITY_GAP_STATIC",
+      "raw_log": "results/race_shared_vector.check-strict.log"
+    },
+    {
+      "file": "race_reader_writer_string.cp",
+      "header": "stdlib/thread.hp",
+      "shape": "one thread reads string::c_str()/size() while another calls string::drop() on the same object",
+      "expect": "REJECT (ideal: static cross-thread lifetime analysis)",
+      "observed": "ACCEPT",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/thread_safety/race_reader_writer_string.cp ok",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "classification": "CAPABILITY_GAP_STATIC",
+      "raw_log": "results/race_reader_writer_string.check-strict.log"
+    },
+    {
+      "file": "race_shared_file_write.cp",
+      "header": "stdlib/thread.hp",
+      "shape": "two threads call file::write on the same file_borrow(stdout) borrowed FILE*",
+      "expect": "REJECT (ideal: borrowed-resource alias/race analysis)",
+      "observed": "ACCEPT",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/thread_safety/race_shared_file_write.cp ok",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "classification": "CAPABILITY_GAP_STATIC",
+      "raw_log": "results/race_shared_file_write.check-strict.log"
+    },
+    {
+      "file": "race_mutex_not_held.cp",
+      "header": "stdlib/thread.hp",
+      "shape": "mutex created but no lock/guard held when two threads mutate shared counter",
+      "expect": "REJECT (ideal: lock-discipline analysis)",
+      "observed": "ACCEPT",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/thread_safety/race_mutex_not_held.cp ok",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "classification": "CAPABILITY_GAP_STATIC",
+      "raw_log": "results/race_mutex_not_held.check-strict.log"
+    }
+  ],
+  "thread_sanitizer_config": {
+    "check_stage": {
+      "command": "./build/c+ check --strict --sanitize=thread <case>",
+      "stdout": "check: tests/stdlib/agent1_handoff/thread_safety/race_shared_vector.cp ok",
+      "exit": 0,
+      "meaning": "flag value accepted but check does no instrumentation; not dynamic evidence",
+      "raw_log": "results/sanitize-thread-check.log"
+    },
+    "build_stage": {
+      "command": "./build/c+ build --strict --sanitize=thread <case> -o /dev/null",
+      "stdout": "error: sanitizer 'thread' is not supported by the selected backend (/usr/bin/clang); detected by a compile-and-run probe",
+      "exit": 1,
+      "meaning": "ThreadSanitizer unavailable on this host; no dynamic race evidence obtainable through build/c+",
+      "raw_log": "results/sanitize-thread-build.log"
+    },
+    "classification": "UNAVAILABLE_BACKEND"
+  },
+  "classification_summary": {
+    "all_four_cases": "ACCEPT / CAPABILITY_GAP_STATIC — strict check emits no [CPLUS- diagnostic for any unsafe concurrent shape",
+    "dynamic_tsan": "UNAVAILABLE_BACKEND — build/c+ rejects --sanitize=thread (exit 1) on this host"
+  },
+  "related_existing_evidence": [
+    "tests/stdlib/compile_time/thread.json — its four unsafe shapes are also ACCEPT with 'RUNTIME' expectations and no [CPLUS- diagnostic",
+    "tests/stdlib/agent2_audit/module_audits/thread.hp.md section 7 items 6-8 — multi-threaded contention [UNTESTED], no ASan on this host",
+    "tests/stdlib/deep_thread_guard.cp / deep_thread_nested.cp — forked ERRORCHECK-mutex and deadlock-watchdog fault-injection pattern for guarded positive controls"
+  ],
+  "agent1_must_provide": {
+    "static": [
+      "Tagged diagnostic (e.g. [CPLUS-RACE]) promoted to error under --strict for all four shapes; target expect=REJECT.",
+      "Synchronisation-state tracking: distinguish unguarded access from access under a mutex/guard actually held across the access, without regressing thread_valid_guard.cp, thread_valid_lock.cp, or deep_thread_task5.cp.",
+      "Cross-thread lifetime/ownership modelling: detect drop()/stdlib_release() concurrent with another thread's read (string case), beyond the existing single-thread UAF forms C+ tracks.",
+      "Borrowed-resource alias modelling: two file* borrows of the same underlying FILE* are one synchronisation target (file::write case)."
+    ],
+    "dynamic": [
+      "Host support for --sanitize=thread (or equivalent runtime race detector) in build/c+; currently exits 1 on this host.",
+      "Bounded, isolated runtime regression fixtures for guarded positive controls to measure the new static check's false-positive rate, reusing the forked ERRORCHECK-mutex pattern; do not run unguarded races in the main harness."
+    ]
+  },
+  "evidence_integrity": "All stdout/exit strings were produced by the recorded commands in this workspace on branch agent/modern-stdlib; raw logs are in results/. Nothing fabricated; no real race executed."
+}

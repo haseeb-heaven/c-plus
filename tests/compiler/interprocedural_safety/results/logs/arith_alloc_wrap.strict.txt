@@ -1,0 +1,10 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_alloc_wrap.c
+returncode: 1
+timed_out: False
+
+<SRC>:3:42: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating
+  int main(void){ int n=2147483647; int *p=malloc(n*4); if(!p)return 2;
+                                           ^~~~~~
+<SRC>:3:49: error: [CPLUS-ARITH] signed integer overflow in multiplication
+  int main(void){ int n=2147483647; int *p=malloc(n*4); if(!p)return 2;
+                                                  ^

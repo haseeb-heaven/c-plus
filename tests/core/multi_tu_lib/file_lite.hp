@@ -1,0 +1,8 @@
+#ifndef CPLUS_CORE_FILE_LITE_HP
+#define CPLUS_CORE_FILE_LITE_HP
+#include <stdio.h>
+#include "cplus/cplus.h"
+resource struct FileLite { FILE *h; };
+static inline void FileLite_drop(FileLite *f) { if (f->h) { fclose(f->h); f->h = NULL; } }
+static inline FileLite FileLite_open(const char *p) { FileLite f; f.h = fopen(p, "r"); return f; }
+#endif

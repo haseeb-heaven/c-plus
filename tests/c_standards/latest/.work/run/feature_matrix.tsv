@@ -1,0 +1,6 @@
+bool_true	0	0	(none - compiled cleanly)
+binary_literal	0	0	(none - compiled cleanly)
+digit_separator	0	124	(TIMEOUT after 10s - C+ frontend hung; no diagnostic emitted)
+bitint	0	1	tests/c_standards/latest/.work/run/features/bitint.c:4:3: error: [CPLUS-FFI] _BitInt has no safe C+ lowering; use int64_t or cplus_checked arithmetic
+typeof_operator	0	0	(none - compiled cleanly)
+nullptr	0	1	tests/c_standards/latest/.work/run/features/nullptr.c:4:12: error: [CPLUS-FFI] C23 nullptr is not supported; use NULL

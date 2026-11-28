@@ -1,5 +1,10 @@
 #!/bin/sh
 # Full C+ verification: build, automated suites, demos, benchmarks.
+#
+# Freeze directive (2026-11-28): apps/ and GAME_SUITE are frozen. No new app,
+# game, web-server or GUI demo is added; existing runners below stay intact and
+# continue to run. Agent 2 cycles go to stdlib/libc hardening, documented in
+# docs/AGENT2_FOCUS.md. This is a documentation-only change to this script.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
@@ -13,11 +18,48 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== perf comparison =="
+./tests/core/perf_compare.sh >/dev/null
+
+echo "== adversarial fuzz =="
+python3 tests/core/adversarial_fuzz.py
+
+echo "== mass fuzz (thousands of cases, multi-seed) =="
+./tests/core/mass_fuzz_all.sh
+
+echo "== cross-TU fuzz (two-file programs) =="
+python3 tests/core/cross_tu_fuzz.py
+
+echo "== acceptance / detection / false-positive metrics =="
+python3 tests/metrics/measure.py
+
+echo "== 100-scenario adversarial red team =="
+python3 tests/core/redteam_100.py
+
+echo "== brutal memory-bug fuzz =="
+python3 tests/core/brutal_memory_fuzz.py
+
+echo "== strict/default modes =="
+./tests/core/strict_mode.sh
+
+echo "== contracts and SDK smoke =="
+python3 tests/core/validate_contracts.py
+./tests/core/sdk_smoke.sh
+
+echo "== native capabilities =="
+./tests/core/capabilities.sh >/dev/null
+
+echo "== quarantine semantics =="
+./tests/core/quarantine/run.sh
+
+echo "== libc contract matrix =="
+./tests/core/libc_matrix/run.sh
+
 echo "== cli compatibility =="
 ./tests/cli_compat_test.sh
 
 echo "== complex examples (build only) =="
-./examples/build_examples.sh
+./apps/legacy_examples/build_examples.sh
 
 echo "== breaker v3 =="
 bash tests/stress/cplus_breaker_v3/run.sh
@@ -32,7 +74,7 @@ echo "== logging =="
 ./tests/logging_test.sh
 
 echo "== demos =="
-./demos/run_demos.sh
+./apps/legacy_demos/run_demos.sh
 
 echo "== benchmarks (vs clang -O2) =="
 ./benchmarks/run_bench.sh

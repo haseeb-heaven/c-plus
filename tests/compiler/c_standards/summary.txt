@@ -1,0 +1,118 @@
+C standard matrix for c+ LEGACY C mode
+==============================================================================
+generated : 2026-11-23T10:45:53.562454+00:00
+host      : macOS-27.2.1-arm64-arm-64bit
+cplus     : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+cplus cmd : <CPLUS_BIN> build --legacy-c --sanitize=none --emit-c <generated.c> <fixture.c> -o <binary> -- -std=<std>
+ref cmd   : <REF_CC> -std=<std> -O2 [-isysroot <sdk>] <fixture.c> -o <binary>
+reference : usr-bin-clang    /usr/bin/clang
+reference : homebrew-clang   /opt/homebrew/Cellar/llvm/23.1.6/bin/clang-23 (isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk)
+
+totals    : 56 cases | 48 passed | 0 failed | 8 unsupported
+source    : 56/56 generated C files preserve source bytes (except #line)
+runtime   : 48 cases compared stdout and exit
+
+per standard:
+  c89     8 cases |  8 passed | 0 failed | 0 unsupported
+  gnu89   8 cases |  8 passed | 0 failed | 0 unsupported
+  c99     8 cases |  8 passed | 0 failed | 0 unsupported
+  c11     8 cases |  8 passed | 0 failed | 0 unsupported
+  c17     8 cases |  8 passed | 0 failed | 0 unsupported
+  c2x     8 cases |  8 passed | 0 failed | 0 unsupported
+  c23     8 cases |  0 passed | 0 failed | 8 unsupported
+
+per case:
+[PASS   ] c89    arithmetic       source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    control_flow     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    structs_arrays   source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    strings          source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    preprocessor     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    io_formatting    source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    exit_status      source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c89    std_version      source=identical refs=usr-bin-clang
+[PASS   ] gnu89  arithmetic       source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  control_flow     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  structs_arrays   source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  strings          source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  preprocessor     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  io_formatting    source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  exit_status      source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] gnu89  std_version      source=identical refs=usr-bin-clang
+[PASS   ] c99    arithmetic       source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    control_flow     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    structs_arrays   source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    strings          source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    preprocessor     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    io_formatting    source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    exit_status      source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c99    std_version      source=identical refs=usr-bin-clang
+[PASS   ] c11    arithmetic       source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    control_flow     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    structs_arrays   source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    strings          source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    preprocessor     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    io_formatting    source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    exit_status      source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c11    std_version      source=identical refs=usr-bin-clang
+[PASS   ] c17    arithmetic       source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    control_flow     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    structs_arrays   source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    strings          source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    preprocessor     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    io_formatting    source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    exit_status      source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c17    std_version      source=identical refs=usr-bin-clang
+[PASS   ] c2x    arithmetic       source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    control_flow     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    structs_arrays   source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    strings          source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    preprocessor     source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    io_formatting    source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    exit_status      source=identical refs=usr-bin-clang,homebrew-clang
+[PASS   ] c2x    std_version      source=identical refs=usr-bin-clang
+[UNSUPPORTED] c23    arithmetic       source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    control_flow     source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    structs_arrays   source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    strings          source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    preprocessor     source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    io_formatting    source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    exit_status      source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected, homebrew-clang=accepted
+[UNSUPPORTED] c23    std_version      source=identical refs=-
+         both c+ backend and primary reference reject -std=c23; cplus=rejected; usr-bin-clang=rejected
+
+Exact diagnostics for unsupported standards:
+--- c23 / cplus (fixtures: arithmetic, control_flow, structs_arrays, strings, preprocessor, io_formatting, exit_status, std_version) ---
+error: invalid value 'c23' in '-std=c23'
+note: use 'c89', 'c90', or 'iso9899:1990' for 'ISO C 1990' standard
+note: use 'iso9899:199409' for 'ISO C 1990 with amendment 1' standard
+note: use 'gnu89' or 'gnu90' for 'ISO C 1990 with GNU extensions' standard
+note: use 'c99' or 'iso9899:1999' for 'ISO C 1999' standard
+note: use 'gnu99' for 'ISO C 1999 with GNU extensions' standard
+note: use 'c11' or 'iso9899:2011' for 'ISO C 2011' standard
+note: use 'gnu11' for 'ISO C 2011 with GNU extensions' standard
+note: use 'c17', 'iso9899:2017', 'c18', or 'iso9899:2018' for 'ISO C 2017' standard
+note: use 'gnu17' or 'gnu18' for 'ISO C 2017 with GNU extensions' standard
+note: use 'c2x' for 'Working Draft for ISO C2x' standard
+note: use 'gnu2x' for 'Working Draft for ISO C2x with GNU extensions' standard
+--- end c23 / cplus ---
+--- c23 / usr-bin-clang (fixtures: arithmetic, control_flow, structs_arrays, strings, preprocessor, io_formatting, exit_status, std_version) ---
+error: invalid value 'c23' in '-std=c23'
+note: use 'c89', 'c90', or 'iso9899:1990' for 'ISO C 1990' standard
+note: use 'iso9899:199409' for 'ISO C 1990 with amendment 1' standard
+note: use 'gnu89' or 'gnu90' for 'ISO C 1990 with GNU extensions' standard
+note: use 'c99' or 'iso9899:1999' for 'ISO C 1999' standard
+note: use 'gnu99' for 'ISO C 1999 with GNU extensions' standard
+note: use 'c11' or 'iso9899:2011' for 'ISO C 2011' standard
+note: use 'gnu11' for 'ISO C 2011 with GNU extensions' standard
+note: use 'c17', 'iso9899:2017', 'c18', or 'iso9899:2018' for 'ISO C 2017' standard
+note: use 'gnu17' or 'gnu18' for 'ISO C 2017 with GNU extensions' standard
+note: use 'c2x' for 'Working Draft for ISO C2x' standard
+note: use 'gnu2x' for 'Working Draft for ISO C2x with GNU extensions' standard
+--- end c23 / usr-bin-clang ---

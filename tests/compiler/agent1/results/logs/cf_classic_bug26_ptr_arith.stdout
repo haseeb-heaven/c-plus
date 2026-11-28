@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug26_ptr_arith.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c:3:55: error: [CPLUS-BOUNDS] pointer arithmetic more than one past the end of 'arr'

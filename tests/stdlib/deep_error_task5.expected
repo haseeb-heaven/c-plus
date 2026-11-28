@@ -1,0 +1,24 @@
+err_bound_0 1
+err_bound_1 1
+err_bound_254 1
+err_bound_255 1
+err_bound_256 1
+err_bound_257 1
+err_no_stale_tail 1
+err_null_callback 1
+err_reentrant_no_recursion 1
+err_reentrant_no_latch 1
+err_reentrant_telemetry 1
+err_1000_cycles 1
+err_1000_reset_clean 1
+err_copy_state 1
+err_copy_independent 1
+err_move_state 1
+err_fresh_category_ok 1
+err_invalid_category_code 1
+err_unknown_name 1
+err_negative_category 1
+err_invalid_exit_code 1
+err_code_name_mapping 1
+SKIP_REASON err_code_name_mapping stdlib/error.hp exposes no exit-code-to-name function; only stdlib_category_name() with an "unknown" fallback, covered by err_unknown_name and by DEEP_ERROR_VECTOR_CONTRACT.md E4.
+ERROR_TASK5 22 0

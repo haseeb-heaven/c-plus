@@ -1,0 +1,4 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check --strict dropper.cp
+check: dropper.cp ok
+
+[exit code: 0]

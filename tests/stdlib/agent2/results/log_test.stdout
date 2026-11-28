@@ -1,0 +1,11 @@
+open 1 1
+sink-api 1 1
+write-status 1
+lines 5 filtered 0 fields 1 error-lines 2
+level-name 1 1
+level-parse 1 1 1
+borrowed 1 1
+stderr-open 1
+stdout-sink 1 1
+open-fail 1 1
+zero-sink 1

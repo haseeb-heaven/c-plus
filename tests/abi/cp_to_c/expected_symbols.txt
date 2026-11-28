@@ -1,0 +1,22 @@
+# Exact defined-text symbols expected in libcp_to_c.a (nm -gU, Mach-O leading _).
+# Class methods lowered from C+ classes (<Class>_<method>) first, then the
+# plain-C exported functions.  A match requires an exact "^[0-9A-Fa-f]+ T _<name>$".
+CpAdder_apply
+CpBuffer_read
+CpBuffer_write
+CpLayoutProbe_fill
+CpRecordValidator_check
+CpScaler_apply
+cp_to_c_add
+cp_to_c_buffer_create
+cp_to_c_buffer_destroy
+cp_to_c_buffer_meta
+cp_to_c_buffer_read
+cp_to_c_buffer_write
+cp_to_c_echo_err
+cp_to_c_layout_report
+cp_to_c_mixcall
+cp_to_c_ptr_roundtrip
+cp_to_c_record_by_ptr
+cp_to_c_record_by_value
+cp_to_c_scale_sum

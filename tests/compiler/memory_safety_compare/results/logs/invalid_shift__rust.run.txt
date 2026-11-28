@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__rust.bin
+returncode: 101
+timed_out: False
+
+thread 'main' (24849765) panicked at <SRC>:3:20:
+attempt to shift left with overflow
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

@@ -1,0 +1,1 @@
+int main(void){ unsigned x=0xF0; x &= 0xFF; x |= 0x0F; x ^= 0xAA; return x==0x55 ? 0 : 1; }

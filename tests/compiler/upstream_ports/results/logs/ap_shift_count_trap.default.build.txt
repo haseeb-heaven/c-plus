@@ -1,0 +1,13 @@
+case: ap_shift_count_trap
+mode: default
+step: build
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_shift_count_trap.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_shift_count_trap.default
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:6:13: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+      int x = 1 << s;
+              ^
+

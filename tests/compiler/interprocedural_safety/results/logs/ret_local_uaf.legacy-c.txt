@@ -1,0 +1,9 @@
+command: c+ check --legacy-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_local_uaf.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:1:40: warning: address of stack memory associated with local variable 'x' returned [-Wreturn-stack-address]
+    1 | static int *mk(void){ int x=7; return &x; }
+      |                                        ^
+1 warning generated.

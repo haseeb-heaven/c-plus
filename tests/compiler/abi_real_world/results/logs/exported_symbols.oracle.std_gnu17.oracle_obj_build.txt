@@ -1,0 +1,8 @@
+command: /usr/bin/clang -std=gnu17 -c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.oracle_std_gnu17.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.oracle_std_gnu17.o
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

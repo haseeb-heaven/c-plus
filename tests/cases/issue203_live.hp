@@ -1,0 +1,4 @@
+#ifndef ISSUE203_LIVE_HP
+#define ISSUE203_LIVE_HP
+class Issue203Live { int value; int get(void){ return this->value; } };
+#endif

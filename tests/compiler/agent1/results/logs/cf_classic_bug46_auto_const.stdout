@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug46_auto_const.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug46_auto_const.cp:3:60: error: cannot assign to variable 'y' with const-qualified type 'typeof (x)' (aka 'const int')

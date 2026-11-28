@@ -1,0 +1,1 @@
+check: tests/stdlib/agent1_handoff/strict_safe_mode/06_func_ptr_call.cp ok

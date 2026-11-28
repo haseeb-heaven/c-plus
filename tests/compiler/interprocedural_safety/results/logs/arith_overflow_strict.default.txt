@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_overflow_strict.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:1:41: warning: [CPLUS-ARITH] signed integer overflow in addition
+  int main(void){ int x=2147483647; int y=x+1; return y==0; }
+                                          ^

@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "claim": "C+ is NOT Rust-equivalent; statuses describe evidence, not guarantees",
+  "gates": [
+    {
+      "id": 1,
+      "name": "static array bounds",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "C+ front-end token-level [CPLUS-BOUNDS]/[CPLUS-SAFE-BOUNDS] rejection of constant indices on same-function arrays; __builtin_object_size(p,1) object extents for checked copy APIs. No C+ mechanism for interprocedural, pointer-parameter or heap-capacity bounds.",
+      "evidence": [
+        "tests/compile_fail/constant_oob.c",
+        "tests/compile_fail/constant_oob.err",
+        "tests/compile_fail/multidim_bounds.c",
+        "tests/compile_fail/case13_dispatch_const.c",
+        "tests/compile_fail/case13_dispatch_const.err",
+        "docs/libc/KNOWN_COMPILER_GAPS.md"
+      ],
+      "limitation": "Only constant/direct subscripts are rejected. A heap destination such as malloc(1) indexed in a loop compiles silently and corrupts the heap; raw pointer parameters are not bounds-checked."
+    },
+    {
+      "id": 2,
+      "name": "runtime bounds",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "Checked _s APIs and the ordinary-C mapping use tracked remaining capacity (interior and one-past-end pointers) plus __builtin_object_size(p,1), with strict fail-closed mode. Raw runtime-indexed subscripts are detected only by Clang UBSan, not by C+.",
+      "evidence": [
+        "docs/libc/ORDINARY_C_SAFETY.md",
+        "docs/libc/DISPATCH_BOUNDS_HANDOFF.md",
+        "tests/runtime_fail/bounds.stderr",
+        "tests/runtime_fail/case13_dispatch_runtime.stderr",
+        "tests/scenarios/cve_like/NOTES_1.md",
+        "tests/scenarios/cve_like/NOTES_4.md"
+      ],
+      "limitation": "No C+ runtime instrumentation for raw array subscripts. UBSan abort is sanitizer evidence, not a language guarantee; default mode warns but does not refuse when capacity is genuinely unknown."
+    },
+    {
+      "id": 3,
+      "name": "heap alloc/dealloc safety",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "Side-table allocation metadata with generation counters, overflow-rejecting calloc/realloc, live-count telemetry, checked free. ASan observes host malloc blocks but is verification only.",
+      "evidence": [
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "docs/libc/ADVERSARIAL_FINDINGS.md",
+        "docs/libc/CONTRACT_STATUS.md",
+        "docs/libc/ASAN_AUDIT.md",
+        "tests/crt/adversarial/test_heap_oob_mitigation.c"
+      ],
+      "limitation": "Raw p[i] on a tracked heap block is not checked; cross-allocator free and host-free bypass are undefined behaviour; metadata is diagnostic rather than provenance. ASan OOB reports are sanitizer evidence."
+    },
+    {
+      "id": 4,
+      "name": "use-after-free",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "Explicit cplus_check_live / cplus_alloc_is_live, generation checks, checked release, and caller-side re-derivation of aliases after realloc; fail-stop on detected stale handles.",
+      "evidence": [
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "tests/runtime_fail/classic_bug2_uaf.c",
+        "tests/runtime_fail/classic_bug2_uaf.stderr",
+        "tests/runtime_fail/classic_bug2_uaf.exit",
+        "tests/scenarios/cve_like/NOTES_2.md",
+        "tests/scenarios/cve_like/NOTES_3.md",
+        "docs/libc/CONTRACT_STATUS.md"
+      ],
+      "limitation": "A stale raw alias cannot be revoked; a recycled address can defeat the bounded recent-free table; the dedicated test calls the check explicitly and does not make arbitrary dereferences safe."
+    },
+    {
+      "id": 5,
+      "name": "double free",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "cplus_free_checked / free_checked_s with an open-addressed recent-free cache refuse repeated or invalid release; deterministic C+ runtime traps.",
+      "evidence": [
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "docs/libc/ADVERSARIAL_FINDINGS.md",
+        "tests/runtime_fail/classic_bug5_double_free.c",
+        "tests/runtime_fail/classic_bug5_double_free.stderr",
+        "tests/runtime_fail/classic_bug5_double_free.exit",
+        "tests/runtime_fail/double_release.c",
+        "tests/runtime_fail/double_release.stderr",
+        "docs/libc/CONTRACT_STATUS.md"
+      ],
+      "limitation": "Classification is best-effort with a 1024-entry cache; collisions can misclassify. Raw free(p) twice and wrong-allocator frees remain undefined behaviour."
+    },
+    {
+      "id": 6,
+      "name": "ownership/lifetime",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "C+ resource/owner/borrow annotations with compile-time move, copy, escape and stack-return diagnostics; ownership-transfer and generation APIs plus explicit caller discipline.",
+      "evidence": [
+        "tests/compile_fail/use_after_move.c",
+        "tests/compile_fail/resource_copy.c",
+        "tests/compile_fail/owned_not_resource.c",
+        "tests/compile_fail/stack_return.c",
+        "tests/compile_fail/borrow_escape.c",
+        "tests/compile_fail/managed_escape.c",
+        "docs/libc/KNOWN_COMPILER_GAPS.md",
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "tests/scenarios/cve_like/NOTES_3.md"
+      ],
+      "limitation": "547 of 1200 stack-escape scenarios are undiagnosed; no dedicated [CPLUS-LIFETIME] stack-escape check, no interprocedural lifetime analysis, and no borrow checker for raw C (explicitly out of scope)."
+    },
+    {
+      "id": 7,
+      "name": "null/dangling",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "Compile-time null-dereference diagnostics for provable cases; guarded library entry points set errno=EINVAL and return defined failures; liveness/generation queries for tracked pointers.",
+      "evidence": [
+        "tests/compile_fail/null_deref.c",
+        "tests/compile_fail/null_deref.err",
+        "tests/compile_fail/classic_bug6_null.c",
+        "tests/compile_fail/classic_bug6_null.err",
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "docs/libc/CONTRACT_STATUS.md",
+        "tests/scenarios/cve_like/NOTES_3.md"
+      ],
+      "limitation": "Unguarded ISO APIs intentionally keep UB; escaped raw pointers and compound-literal addresses cannot be revoked; null pointer parameters to a helper escape some checks."
+    },
+    {
+      "id": 8,
+      "name": "data races",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "One C+ compile-time diagnostic for unsynchronized writes to a shared global; atomics/mutexes inside allocator and logging metadata; caller-side mutex and stop flag in the safe scenario.",
+      "evidence": [
+        "tests/compile_fail/classic_bug24_race.c",
+        "tests/compile_fail/classic_bug24_race.err",
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "tests/scenarios/runtime_13_threads.c",
+        "tests/scenarios/cve_like/NOTES_5.md"
+      ],
+      "limitation": "The cve-like race fix is caller-side and TSan output is sanitizer evidence; no language-level thread-ownership model, and shared FILE*, errno and mbstate_t remain caller synchronization responsibility."
+    },
+    {
+      "id": 9,
+      "name": "integer overflow",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PARTIAL",
+      "mechanism": "calloc/realloc reject wrapping n*size; conversion wrappers saturate with ERANGE; C+ compile-time diagnostics for some shift counts; checked arithmetic guards in safe scenario variants. Signed-overflow runtime detection is UBSan only.",
+      "evidence": [
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "docs/libc/ADVERSARIAL_FINDINGS.md",
+        "tests/runtime_fail/alloc_overflow.c",
+        "tests/runtime_fail/alloc_overflow.exit",
+        "tests/runtime_fail/classic_bug9_overflow.stderr",
+        "tests/compile_fail/classic_bug19_shift.c",
+        "tests/scenarios/cve_like/NOTES_1.md",
+        "tests/scenarios/cve_like/NOTES_2.md",
+        "tests/scenarios/cve_like/NOTES_4.md"
+      ],
+      "limitation": "Signed overflow, divide-by-zero and invalid shifts are NOT FIXABLE BY LIBC; the runtime test is UBSan. Unsigned wrap is well-defined and not flagged. Rust release builds wrap by default unless overflow-checks are enabled."
+    },
+    {
+      "id": 10,
+      "name": "uninitialized memory",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "Dedicated C+ compile-time diagnostics for locally provable uninitialized reads; corpora use deliberately hostile but initialized objects so wrappers define their behaviour.",
+      "evidence": [
+        "tests/compile_fail/uninitialized.c",
+        "tests/compile_fail/uninitialized.err",
+        "tests/compile_fail/classic_bug7_uninit.c",
+        "tests/compile_fail/classic_bug7_uninit.err",
+        "docs/libc/C_BUG_CLASS_MATRIX.md",
+        "docs/libc/ADVERSARIAL_FINDINGS.md"
+      ],
+      "limitation": "Reading truly uninitialized memory, or an uninitialized field of an otherwise initialized object, is caller UB; no language-level definite-assignment analysis for all paths."
+    },
+    {
+      "id": 11,
+      "name": "function-pointer/indirect-call validation",
+      "cplus_status": "PARTIAL",
+      "rust_status": "PROVEN",
+      "mechanism": "C+ [CPLUS-BOUNDS] rejects a constant out-of-range index into a function-pointer table; caller-side cmd<N check in the safe variant. Runtime index detection is Clang UBSan only.",
+      "evidence": [
+        "docs/libc/DISPATCH_BOUNDS_HANDOFF.md",
+        "tests/compile_fail/case13_dispatch_const.c",
+        "tests/compile_fail/case13_dispatch_const.err",
+        "tests/runtime_fail/case13_dispatch_runtime.c",
+        "tests/runtime_fail/case13_dispatch_runtime.stderr",
+        "tests/scenarios/cve_like/NOTES_5.md"
+      ],
+      "limitation": "C+ inserts no runtime check for an index it cannot prove statically; no CFI, indirect-call target validation or shadow stack, so a corrupted table would still be followed."
+    },
+    {
+      "id": 12,
+      "name": "FFI/unsafe boundaries",
+      "cplus_status": "NOT_PROVEN",
+      "rust_status": "PROVEN",
+      "mechanism": "Explicit header opt-in for ordinary-C mapping, typed checked APIs and machine-readable contracts with stated limitations; these are conventions and contracts, not a language-enforced boundary.",
+      "evidence": [
+        "docs/libc/ORDINARY_C_SAFETY.md",
+        "docs/libc/CONTRACT_STATUS.md",
+        "docs/libc/ADVERSARIAL_FINDINGS.md",
+        "tests/scenarios/cve_like/NOTES_1.md",
+        "tests/scenarios/cve_like/NOTES_2.md",
+        "tests/scenarios/cve_like/NOTES_3.md",
+        "tests/scenarios/cve_like/NOTES_4.md",
+        "tests/scenarios/cve_like/NOTES_5.md"
+      ],
+      "limitation": "No unsafe keyword or language-enforced FFI boundary; C+ cannot establish provenance or interior-object identity for arbitrary pointers, cannot prevent cross-allocator frees, and cannot make a host call safe."
+    }
+  ]
+}

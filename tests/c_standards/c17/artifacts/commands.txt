@@ -1,0 +1,43 @@
+SECTION 1: plain clang -std=<val> -pedantic-errors
+/usr/bin/clang -std=c17 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_c17
+timeout 30 tests/c_standards/c17/artifacts/clang_c17
+/usr/bin/clang -std=c18 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_c18
+timeout 30 tests/c_standards/c17/artifacts/clang_c18
+/usr/bin/clang -std=iso9899:2017 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_iso9899_2017
+timeout 30 tests/c_standards/c17/artifacts/clang_iso9899_2017
+/usr/bin/clang -std=iso9899:2018 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_iso9899_2018
+timeout 30 tests/c_standards/c17/artifacts/clang_iso9899_2018
+/usr/bin/clang -std=gnu17 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_gnu17
+timeout 30 tests/c_standards/c17/artifacts/clang_gnu17
+SECTION 2: C+ driver -std=<val> --sanitize=none
+./build/c+ build tests/c_standards/c17/source.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_c17
+timeout 30 tests/c_standards/c17/artifacts/cplus_c17
+./build/c+ build tests/c_standards/c17/source.c -std=c17 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_c17
+./build/c+ build tests/c_standards/c17/source.c -std=c18 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_c18
+timeout 30 tests/c_standards/c17/artifacts/cplus_c18
+./build/c+ build tests/c_standards/c17/source.c -std=c18 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_c18
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2017 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_iso9899_2017
+timeout 30 tests/c_standards/c17/artifacts/cplus_iso9899_2017
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2017 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_iso9899_2017
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2018 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_iso9899_2018
+timeout 30 tests/c_standards/c17/artifacts/cplus_iso9899_2018
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2018 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_iso9899_2018
+./build/c+ build tests/c_standards/c17/source.c -std=gnu17 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_gnu17
+timeout 30 tests/c_standards/c17/artifacts/cplus_gnu17
+./build/c+ build tests/c_standards/c17/source.c -std=gnu17 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_gnu17
+/usr/bin/clang -std=c89 -pedantic-errors tests/c_standards/c17/source.c (expected failure)
+./build/c+ build tests/c_standards/c17/source.c -std=c89 --sanitize=none (expected failure)
+./build/c+ build tests/c_standards/c17/source.c -std=bogus --sanitize=none (expected failure)
+SECTION 3: real projects via C+ --legacy-c -std=c17
+./build/c+ build tests/c_standards/c17/artifacts/game_a_snake.c -std=c17 --sanitize=none (Safe mode)
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/game_a_snake.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/game_a_snake
+./build/c+ build tests/c_standards/c17/artifacts/game_b_2048.c -std=c17 --sanitize=none (Safe mode)
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/game_b_2048.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/game_b_2048
+./build/c+ build tests/c_standards/c17/artifacts/cli_app_xdump.c -std=c17 --sanitize=none (Safe mode)
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/cli_app_xdump.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/cli_app_xdump
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/game_b_2048.c -std=c17 --sanitize=none --verbose
+printf 'q' | timeout 30 tests/c_standards/c17/artifacts/game_a_snake
+timeout 30 tests/c_standards/c17/artifacts/game_b_2048 test
+timeout 30 tests/c_standards/c17/artifacts/game_b_2048 --version
+timeout 30 tests/c_standards/c17/artifacts/game_b_2048 --help
+timeout 30 tests/c_standards/c17/artifacts/cli_app_xdump -v | -h | file cases

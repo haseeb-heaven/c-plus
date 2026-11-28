@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__cplus.bin
+returncode: -6
+timed_out: False
+
+C+ error: index 7 is outside the bounds of 'a' (length 4)

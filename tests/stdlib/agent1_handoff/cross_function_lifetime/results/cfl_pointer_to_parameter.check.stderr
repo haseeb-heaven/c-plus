@@ -1,0 +1,4 @@
+tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_pointer_to_parameter.cp:10:13: error: address of stack memory associated with parameter 'value' returned [-Werror,-Wreturn-stack-address]
+   10 |     return &value;             /* address of parameter outlives the call */
+      |             ^~~~~
+1 error generated.

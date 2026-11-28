@@ -1,0 +1,1501 @@
+{
+  "suite": "runtime_memory_safety",
+  "generated_at": "2026-11-23T12:33:13",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "binary_version": [
+    "C+ 0.1.0"
+  ],
+  "checks": {
+    "primary_flags": [
+      "--strict",
+      "--sanitize=none"
+    ],
+    "supplementary_flags": [
+      "--strict",
+      "--sanitize=address"
+    ],
+    "asan_clang": "/opt/homebrew/opt/llvm/bin/clang",
+    "sdkroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+    "runtime_snapshot": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/results/root"
+  },
+  "timeout_seconds": 60,
+  "workers": 2,
+  "modes": [
+    "primary",
+    "supplementary"
+  ],
+  "totals": {
+    "cases": 28,
+    "cases_passed": 28,
+    "cases_failed": 0,
+    "mode_checks": 56,
+    "failure_entries": 0,
+    "by_kind": {
+      "safe": 11,
+      "runtime_abort": 3,
+      "asan_only": 8,
+      "static_reject": 6
+    }
+  },
+  "by_family": {
+    "alloc_free_consistency": {
+      "cases": 5,
+      "passed": 5,
+      "failed": 0
+    },
+    "allocation_consistency": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "array_decay": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "casts": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "function_params_returns": {
+      "cases": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "global_bounds": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "heap_bounds": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "interior_pointers": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "pointer_arithmetic": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "pointer_to_pointer": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "stack_bounds": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "struct_pointer_fields": {
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "failures": [],
+  "cases": [
+    {
+      "name": "stack_bounds_ok",
+      "family": "stack_bounds",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 2;\nint main(void){ int a[4]={1,2,3,4}; printf(\"v=%d\\n\", a[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "stack_bounds_oob",
+      "family": "stack_bounds",
+      "kind": "runtime_abort",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 7;\nint main(void){ int a[4]={1,2,3,4}; printf(\"v=%d\\n\", a[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "C+ error: index 7 is outside the bounds of 'a' (length 4)"
+            }
+          },
+          "result": "RUNTIME_ABORT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/stack_bounds_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "C+ error: index 7 is outside the bounds of 'a' (length 4)"
+            }
+          },
+          "result": "RUNTIME_ABORT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "heap_bounds_ok",
+      "family": "heap_bounds",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstatic volatile int idx = 2;\nint main(void){ int *a=malloc(16); if(!a)return 2; for(int i=0;i<4;i++)a[i]=i;\n  printf(\"v=%d\\n\", a[idx]); free(a); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=2"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=2"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "heap_bounds_oob",
+      "family": "heap_bounds",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstatic volatile int idx = 5;\nint main(void){ int *a=malloc(16); if(!a)return 2; for(int i=0;i<4;i++)a[i]=i;\n  printf(\"v=%d\\n\", a[idx]); free(a); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=0"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/heap_bounds_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==23709==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000964 at pc 0x000104dd8bb4 bp 0x00016b02e270 sp 0x00016b02e268\nREAD of size 4 at 0x602000000964 thread T0\n    #0 0x000104dd8bb0 in main heap_bounds_oob.c:6\n    #1 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\n0x602000000964 is located 4 bytes after 16-byte region [0x602000000950,0x602000000960)\nallocated by thread T0 here:\n    #0 0x0001053a140c in malloc+0x70 (libclang_rt.asan_osx_dynamic.dylib:arm64+0x5540c)\n    #1 0x000104dd8a68 in main heap_bounds_oob.c:5\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nSUMMARY: AddressSanitizer: heap-buffer-overflow heap_bounds_oob.c:6 in main\nShadow bytes around the buggy address:\n  0x602000000680: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000700: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000780: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000800: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000880: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 06\n=>0x602000000900: fa fa 00 fa fa fa 00 00 fa fa 00 00[fa]fa fa fa\n  0x602000000980: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==23709==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "global_bounds_ok",
+      "family": "global_bounds",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 2;\nint g[4]={1,2,3,4};\nint main(void){ printf(\"v=%d\\n\", g[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "global_bounds_oob",
+      "family": "global_bounds",
+      "kind": "runtime_abort",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 8;\nint g[4]={1,2,3,4};\nint main(void){ printf(\"v=%d\\n\", g[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "C+ error: index 8 is outside the bounds of 'g' (length 4)"
+            }
+          },
+          "result": "RUNTIME_ABORT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/global_bounds_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "C+ error: index 8 is outside the bounds of 'g' (length 4)"
+            }
+          },
+          "result": "RUNTIME_ABORT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "decay_ok",
+      "family": "array_decay",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 2;\nstatic int first(int *p){ return p[idx]; }\nint main(void){ int a[4]={1,2,3,4}; printf(\"v=%d\\n\", first(a)); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "decay_oob",
+      "family": "array_decay",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 6;\nstatic int first(int *p){ return p[idx]; }\nint main(void){ int a[4]={1,2,3,4}; printf(\"v=%d\\n\", first(a)); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=2030698684"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/decay_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==24107==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016d71a258 at pc 0x0001026ecc10 bp 0x00016d71a1d0 sp 0x00016d71a1c8\nREAD of size 4 at 0x00016d71a258 thread T0\n    #0 0x0001026ecc0c in first decay_oob.c:4\n    #1 0x0001026ecae0 in main decay_oob.c:5\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nAddress 0x00016d71a258 is located in stack of thread T0 at offset 56 in frame\n    #0 0x0001026ec9c8 in main decay_oob.c:5\n\n  This frame has 1 object(s):\n    [32, 48) 'a' (line 5) <== Memory access at offset 56 overflows this variable\nHINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork\n      (longjmp and C++ exceptions *are* supported)\nSUMMARY: AddressSanitizer: stack-buffer-overflow decay_oob.c:4 in first\nShadow bytes around the buggy address:\n  0x00016d719f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n=>0x00016d71a200: 00 00 00 00 f1 f1 f1 f1 00 00 f3[f3]00 00 00 00\n  0x00016d71a280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016d71a480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==24107==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "interior_ok",
+      "family": "interior_pointers",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 1;\nint main(void){ int a[8]={0,1,2,3,4,5,6,7}; int *p=&a[2]; printf(\"v=%d\\n\", p[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "interior_oob",
+      "family": "interior_pointers",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstatic volatile int idx = 5;\nint main(void){ int *a=malloc(4*sizeof(int)); if(!a)return 2; for(int i=0;i<4;i++)a[i]=i;\n  int *p=&a[2]; printf(\"v=%d\\n\", p[idx]); free(a); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=0"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/interior_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==24225==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000096c at pc 0x000100d24bb4 bp 0x00016f0e2260 sp 0x00016f0e2258\nREAD of size 4 at 0x60200000096c thread T0\n    #0 0x000100d24bb0 in main interior_oob.c:6\n    #1 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\n0x60200000096c is located 12 bytes after 16-byte region [0x602000000950,0x602000000960)\nallocated by thread T0 here:\n    #0 0x0001011e940c in malloc+0x70 (libclang_rt.asan_osx_dynamic.dylib:arm64+0x5540c)\n    #1 0x000100d24a5c in main interior_oob.c:5\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nSUMMARY: AddressSanitizer: heap-buffer-overflow interior_oob.c:6 in main\nShadow bytes around the buggy address:\n  0x602000000680: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000700: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000780: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000800: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000880: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 06\n=>0x602000000900: fa fa 00 fa fa fa 00 00 fa fa 00 00 fa[fa]fa fa\n  0x602000000980: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==24225==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "ptr_arith_ok",
+      "family": "pointer_arithmetic",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int n = 2;\nint main(void){ int a[4]={1,2,3,4}; int *p=a; p+=n; printf(\"v=%d\\n\", *p); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "ptr_arith_oob",
+      "family": "pointer_arithmetic",
+      "kind": "runtime_abort",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int n = 10;\nint main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"v=%d\\n\", *(p+n)); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 101,
+              "timeout": false,
+              "output": "C+ runtime error: out-of-bounds pointer formation at <SRC>:4: pointer offset 10 is outside [0, 4] elements"
+            }
+          },
+          "result": "RUNTIME_ABORT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 101,
+              "timeout": false,
+              "output": "C+ runtime error: out-of-bounds pointer formation at <SRC>:4: pointer offset 10 is outside [0, 4] elements"
+            }
+          },
+          "result": "RUNTIME_ABORT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "ptr2_ok",
+      "family": "pointer_to_pointer",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 2;\nstatic int rd(int **pp){ return (*pp)[idx]; }\nint main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"v=%d\\n\", rd(&p)); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "ptr2_oob",
+      "family": "pointer_to_pointer",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 6;\nstatic void wr(int **pp){ (*pp)[idx]=1; }\nint main(void){ int a[4]={0}; int *p=a; wr(&p); printf(\"v=%d\\n\", a[0]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=0"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==24640==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016b93e218 at pc 0x0001044c8c20 bp 0x00016b93e180 sp 0x00016b93e178\nWRITE of size 4 at 0x00016b93e218 thread T0\n    #0 0x0001044c8c1c in wr ptr2_oob.c:4\n    #1 0x0001044c8a98 in main ptr2_oob.c:5\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nAddress 0x00016b93e218 is located in stack of thread T0 at offset 56 in frame\n    #0 0x0001044c8928 in main ptr2_oob.c:5\n\n  This frame has 2 object(s):\n    [32, 48) 'a' (line 5)\n    [64, 72) 'p' (line 5) <== Memory access at offset 56 underflows this variable\nHINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork\n      (longjmp and C++ exceptions *are* supported)\nSUMMARY: AddressSanitizer: stack-buffer-overflow ptr2_oob.c:4 in wr\nShadow bytes around the buggy address:\n  0x00016b93df80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e180: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1\n=>0x00016b93e200: 00 00 f2[f2]00 f3 f3 f3 00 00 00 00 00 00 00 00\n  0x00016b93e280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016b93e480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==24640==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "cast_ok",
+      "family": "casts",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 2;\nint main(void){ int a[4]={1,2,3,4}; void *v=a; int *p=(int*)v; printf(\"v=%d\\n\", p[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "cast_oob",
+      "family": "casts",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 6;\nint main(void){ int a[4]={1,2,3,4}; void *v=a; int *p=(int*)v; printf(\"v=%d\\n\", p[idx]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=1824587989"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/cast_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==24930==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016fd4e218 at pc 0x0001000b8bac bp 0x00016fd4e1d0 sp 0x00016fd4e1c8\nREAD of size 4 at 0x00016fd4e218 thread T0\n    #0 0x0001000b8ba8 in main cast_oob.c:4\n    #1 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nAddress 0x00016fd4e218 is located in stack of thread T0 at offset 56 in frame\n    #0 0x0001000b8a28 in main cast_oob.c:4\n\n  This frame has 1 object(s):\n    [32, 48) 'a' (line 4) <== Memory access at offset 56 overflows this variable\nHINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork\n      (longjmp and C++ exceptions *are* supported)\nSUMMARY: AddressSanitizer: stack-buffer-overflow cast_oob.c:4 in main\nShadow bytes around the buggy address:\n  0x00016fd4df80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e180: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1\n=>0x00016fd4e200: 00 00 f3[f3]00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016fd4e480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==24930==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "param_return_ok",
+      "family": "function_params_returns",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstatic int *id(int *p){ return p; }\nint main(void){ int *a=malloc(16); if(!a)return 2; for(int i=0;i<4;i++)a[i]=i;\n  int *q=id(a); printf(\"v=%d\\n\", q[2]); free(a); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_return_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_return_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=2"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_return_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_return_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=2"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "param_oob",
+      "family": "function_params_returns",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstatic volatile int idx = 5;\nstatic int rd(int *p){ return p[idx]; }\nint main(void){ int a[4]={1,2,3,4}; printf(\"v=%d\\n\", rd(a)); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=1"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==25318==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016f66e274 at pc 0x000100798c10 bp 0x00016f66e1f0 sp 0x00016f66e1e8\nREAD of size 4 at 0x00016f66e274 thread T0\n    #0 0x000100798c0c in rd param_oob.c:4\n    #1 0x000100798ae0 in main param_oob.c:5\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nAddress 0x00016f66e274 is located in stack of thread T0 at offset 52 in frame\n    #0 0x0001007989c8 in main param_oob.c:5\n\n  This frame has 1 object(s):\n    [32, 48) 'a' (line 5) <== Memory access at offset 52 overflows this variable\nHINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork\n      (longjmp and C++ exceptions *are* supported)\nSUMMARY: AddressSanitizer: stack-buffer-overflow param_oob.c:4 in rd\nShadow bytes around the buggy address:\n  0x00016f66df80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n=>0x00016f66e200: 00 00 00 00 00 00 00 00 f1 f1 f1 f1 00 00[f3]f3\n  0x00016f66e280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n  0x00016f66e480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==25318==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "param_heap_oob",
+      "family": "function_params_returns",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstatic volatile int idx = 5;\nstatic int rd(int *p){ return p[idx]; }\nint main(void){ int *a=malloc(16); if(!a)return 2; for(int i=0;i<4;i++)a[i]=i;\n  printf(\"v=%d\\n\", rd(a)); free(a); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_heap_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_heap_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=0"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_heap_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/param_heap_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==25381==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000964 at pc 0x0001029d8bb0 bp 0x00016d42e240 sp 0x00016d42e238\nREAD of size 4 at 0x602000000964 thread T0\n    #0 0x0001029d8bac in rd param_heap_oob.c:5\n    #1 0x0001029d8ae8 in main param_heap_oob.c:7\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\n0x602000000964 is located 4 bytes after 16-byte region [0x602000000950,0x602000000960)\nallocated by thread T0 here:\n    #0 0x0001030e940c in malloc+0x70 (libclang_rt.asan_osx_dynamic.dylib:arm64+0x5540c)\n    #1 0x0001029d89f8 in main param_heap_oob.c:6\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nSUMMARY: AddressSanitizer: heap-buffer-overflow param_heap_oob.c:5 in rd\nShadow bytes around the buggy address:\n  0x602000000680: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000700: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000780: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000800: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000880: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 06\n=>0x602000000900: fa fa 00 fa fa fa 00 00 fa fa 00 00[fa]fa fa fa\n  0x602000000980: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==25381==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "struct_ptr_ok",
+      "family": "struct_pointer_fields",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n\nstruct B{ int *p; };\nstatic int rd(struct B *b){ return b->p[2]; }\nint main(void){ int a[4]={1,2,3,4}; struct B b; b.p=a; printf(\"v=%d\\n\", rd(&b)); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=3"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "struct_ptr_oob",
+      "family": "struct_pointer_fields",
+      "kind": "asan_only",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstatic volatile int idx = 4;\nstruct B{ int *p; };\nstatic void wr(struct B *b){ b->p[idx]=1; }\nint main(void){ int *a=malloc(4*sizeof(int)); if(!a)return 2; for(int i=0;i<4;i++)a[i]=i;\n  struct B b; b.p=a; wr(&b); printf(\"v=%d\\n\", a[0]); free(a); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_oob.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=0"
+            }
+          },
+          "result": "PRIMARY_CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_oob.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": -6,
+              "timeout": false,
+              "output": "=================================================================\n==25517==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000960 at pc 0x000100abcbac bp 0x00016f34a160 sp 0x00016f34a158\nWRITE of size 4 at 0x602000000960 thread T0\n    #0 0x000100abcba8 in wr struct_ptr_oob.c:6\n    #1 0x000100abc9c0 in main struct_ptr_oob.c:8\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\n0x602000000960 is located 0 bytes after 16-byte region [0x602000000950,0x602000000960)\nallocated by thread T0 here:\n    #0 0x00010126d40c in malloc+0x70 (libclang_rt.asan_osx_dynamic.dylib:arm64+0x5540c)\n    #1 0x000100abc8b8 in main struct_ptr_oob.c:7\n    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)\n\nSUMMARY: AddressSanitizer: heap-buffer-overflow struct_ptr_oob.c:6 in wr\nShadow bytes around the buggy address:\n  0x602000000680: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000700: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000780: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000800: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00\n  0x602000000880: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 06\n=>0x602000000900: fa fa 00 fa fa fa 00 00 fa fa 00 00[fa]fa fa fa\n  0x602000000980: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000a80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\n  0x602000000b80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa\nShadow byte legend (one shadow byte represents 8 application bytes):\n  Addressable:           00\n  Partially addressable: 01 02 03 04 05 06 07 \n  Heap left redzone:       fa\n  Freed heap region:       fd\n  Stack left redzone:      f1\n  Stack mid redzone:       f2\n  Stack right redzone:     f3\n  Stack after return:      f5\n  Stack use after scope:   f8\n  Global redzone:          f9\n  Global init order:       f6\n  Poisoned by user:        f7\n  Container overflow:      fc\n  Array cookie:            ac\n  Intra object redzone:    bb\n  ASan internal:           fe\n  Left alloca redzone:     ca\n  Right alloca redzone:    cb\n==25517==ABORTING"
+            }
+          },
+          "result": "ASAN_DETECTED"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "alloc_consistency_ok",
+      "family": "alloc_free_consistency",
+      "kind": "safe",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void){ int *p=calloc(4,sizeof(int)); if(!p)return 2; p[3]=7;\n  printf(\"v=%d\\n\", p[3]); free(p);\n  int *q=malloc(16); if(!q)return 2; q[0]=9; printf(\"w=%d\\n\", q[0]); free(q);\n  printf(\"ok\\n\"); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 0,
+              "timeout": false,
+              "diagnostic": "check: <SRC> ok"
+            },
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_consistency_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_consistency_ok.primary.bin",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=7\nw=9\nok"
+            }
+          },
+          "result": "CLEAN"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 0,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_consistency_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_consistency_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": ""
+            },
+            "run": {
+              "rc": 0,
+              "timeout": false,
+              "output": "v=7\nw=9\nok"
+            }
+          },
+          "result": "CLEAN"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "double_free",
+      "family": "alloc_free_consistency",
+      "kind": "static_reject",
+      "note": "",
+      "source": "#include <stdlib.h>\n\nint main(void){ int *p=malloc(16); if(!p)return 2; free(p); free(p); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 1,
+              "timeout": false,
+              "diagnostic": "<SRC>:3:61: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); free(p); return 0; }\n                                                              ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"
+            },
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/double_free.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/double_free.primary.bin",
+              "diagnostic": "<SRC>:3:61: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); free(p); return 0; }\n                                                              ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"
+            }
+          },
+          "result": "REJECT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/double_free.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/double_free.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": "<SRC>:3:61: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); free(p); return 0; }\n                                                              ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"
+            }
+          },
+          "result": "REJECT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "uaf",
+      "family": "alloc_free_consistency",
+      "kind": "static_reject",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void){ int *p=malloc(16); if(!p)return 2; free(p); printf(\"v=%d\\n\", p[0]); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 1,
+              "timeout": false,
+              "diagnostic": "<SRC>:4:78: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); printf(\"v=%d\\n\", p[0]); return 0; }\n                                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4\nnote: owner released: <SRC>:4"
+            },
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/uaf.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/uaf.primary.bin",
+              "diagnostic": "<SRC>:4:78: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); printf(\"v=%d\\n\", p[0]); return 0; }\n                                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4\nnote: owner released: <SRC>:4"
+            }
+          },
+          "result": "REJECT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/uaf.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/uaf.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": "<SRC>:4:78: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); printf(\"v=%d\\n\", p[0]); return 0; }\n                                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4\nnote: owner released: <SRC>:4"
+            }
+          },
+          "result": "REJECT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "realloc_stale",
+      "family": "alloc_free_consistency",
+      "kind": "static_reject",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void){ int *p=malloc(16); if(!p)return 2; for(int i=0;i<4;i++)p[i]=i;\n  int *q=realloc(p,64); if(!q){free(p);return 2;} printf(\"v=%d\\n\", p[0]); free(q); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 1,
+              "timeout": false,
+              "diagnostic": "<SRC>:5:68: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n    int *q=realloc(p,64); if(!q){free(p);return 2;} printf(\"v=%d\\n\", p[0]); free(q); return 0; }\n                                                                     ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4"
+            },
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/realloc_stale.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/realloc_stale.primary.bin",
+              "diagnostic": "<SRC>:5:68: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n    int *q=realloc(p,64); if(!q){free(p);return 2;} printf(\"v=%d\\n\", p[0]); free(q); return 0; }\n                                                                     ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4"
+            }
+          },
+          "result": "REJECT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/realloc_stale.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/realloc_stale.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": "<SRC>:5:68: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n    int *q=realloc(p,64); if(!q){free(p);return 2;} printf(\"v=%d\\n\", p[0]); free(q); return 0; }\n                                                                     ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:4"
+            }
+          },
+          "result": "REJECT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "invalid_free_interior",
+      "family": "alloc_free_consistency",
+      "kind": "static_reject",
+      "note": "",
+      "source": "#include <stdlib.h>\n\nint main(void){ int *p=malloc(64); if(!p)return 2; free(p+2); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 1,
+              "timeout": false,
+              "diagnostic": "<SRC>:3:52: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n  int main(void){ int *p=malloc(64); if(!p)return 2; free(p+2); return 0; }\n                                                     ^~~~"
+            },
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/invalid_free_interior.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/invalid_free_interior.primary.bin",
+              "diagnostic": "<SRC>:3:52: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n  int main(void){ int *p=malloc(64); if(!p)return 2; free(p+2); return 0; }\n                                                     ^~~~"
+            }
+          },
+          "result": "REJECT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/invalid_free_interior.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/invalid_free_interior.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": "<SRC>:3:52: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n  int main(void){ int *p=malloc(64); if(!p)return 2; free(p+2); return 0; }\n                                                     ^~~~"
+            }
+          },
+          "result": "REJECT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "alloc_wrap",
+      "family": "allocation_consistency",
+      "kind": "static_reject",
+      "note": "",
+      "source": "#include <stdlib.h>\n#include <stdint.h>\n\nint main(void){ size_t n=SIZE_MAX/2; int *p=malloc(n*sizeof(int)); if(!p)return 2; free(p); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 1,
+              "timeout": false,
+              "diagnostic": "<SRC>:4:45: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n  int main(void){ size_t n=SIZE_MAX/2; int *p=malloc(n*sizeof(int)); if(!p)return 2; free(p); return 0; }\n                                              ^~~~~~"
+            },
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_wrap.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_wrap.primary.bin",
+              "diagnostic": "<SRC>:4:45: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n  int main(void){ size_t n=SIZE_MAX/2; int *p=malloc(n*sizeof(int)); if(!p)return 2; free(p); return 0; }\n                                              ^~~~~~"
+            }
+          },
+          "result": "REJECT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_wrap.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_wrap.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": "<SRC>:4:45: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n  int main(void){ size_t n=SIZE_MAX/2; int *p=malloc(n*sizeof(int)); if(!p)return 2; free(p); return 0; }\n                                              ^~~~~~"
+            }
+          },
+          "result": "REJECT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "name": "alloc_zero",
+      "family": "allocation_consistency",
+      "kind": "static_reject",
+      "note": "",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void){ int *p=malloc(0); printf(\"z=%p\\n\",(void*)p); free(p); return 0; }\n",
+      "modes": {
+        "primary": {
+          "mode": "primary",
+          "reasons": [],
+          "steps": {
+            "check": {
+              "rc": 1,
+              "timeout": false,
+              "diagnostic": "<SRC>:4:24: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n  int main(void){ int *p=malloc(0); printf(\"z=%p\\n\",(void*)p); free(p); return 0; }\n                         ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers"
+            },
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_zero.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_zero.primary.bin",
+              "diagnostic": "<SRC>:4:24: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n  int main(void){ int *p=malloc(0); printf(\"z=%p\\n\",(void*)p); free(p); return 0; }\n                         ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers"
+            }
+          },
+          "result": "REJECT"
+        },
+        "supplementary": {
+          "mode": "supplementary",
+          "reasons": [],
+          "steps": {
+            "build": {
+              "rc": 1,
+              "timeout": false,
+              "command": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_zero.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_zero.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+              "diagnostic": "<SRC>:4:24: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n  int main(void){ int *p=malloc(0); printf(\"z=%p\\n\",(void*)p); free(p); return 0; }\n                         ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers"
+            }
+          },
+          "result": "REJECT"
+        }
+      },
+      "passed": true,
+      "reasons": []
+    }
+  ]
+}

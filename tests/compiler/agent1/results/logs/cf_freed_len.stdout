@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_freed_len.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/freed_len.c:5:18: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'p'

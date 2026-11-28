@@ -1,0 +1,4 @@
+game_a	quit_q	game_a.c	printfq
+game_b	self_test	game_b.c	test
+cli_app	version	cli_app.c	-v
+cli_app	help	cli_app.c	-h

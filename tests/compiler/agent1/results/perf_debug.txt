@@ -1,0 +1,9 @@
+== compile time + peak memory ==
+c+ safe       0.37 real 0.13 user 0.05 sys  54640640 maximum resident set size
+c+ legacy     0.14 real 0.11 user 0.01 sys  33521664 maximum resident set size
+clang O2      0.04 real 0.02 user 0.01 sys  28147712 maximum resident set size
+== executable size ==
+   74344 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/core/perf/cplus_safe
+   33744 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/core/perf/cplus_legacy
+   33432 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/core/perf/clang_o2
+  141520 total

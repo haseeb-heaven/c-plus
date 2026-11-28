@@ -1,0 +1,7 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check stack_producer.cp
+stack_producer.cp:6:12: error: address of stack memory associated with local variable 'local' returned [-Werror,-Wreturn-stack-address]
+    6 |     return local;
+      |            ^~~~~
+1 error generated.
+
+[exit code: 1]

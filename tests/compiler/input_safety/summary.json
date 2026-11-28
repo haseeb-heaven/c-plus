@@ -1,0 +1,9 @@
+{
+  "generated": "2026-11-24T02:53:51.203901+00:00",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "valid_input_rc": 0,
+  "valid_output": "Arr is  10\nArr is  30\nEnter value:\nArr is  50\nArr is  123\n",
+  "overflow_rc": 111,
+  "overflow_output": "Arr is  10\nArr is  30\nEnter value:\nC+ runtime error: input overflow at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/input_safety/scan_short.cp:5: cannot store '0xFFFFFF' into 'arr[3]' (short, valid range -32768..32767) - the number is too large/small for this variable type and would overflow memory\n",
+  "pass": true
+}
