@@ -46,16 +46,21 @@ static const char *API_KEYS[] = {
     "name", "params", "ownership", "transfer", "extent",
     "effects", "failure", "diagnostics", "dynamic"
 };
-#define N_API_KEYS ((int)(sizeof(API_KEYS) / sizeof(API_KEYS[0])))
+/* Counts are constants, not macros: a cast inside a macro expansion cannot be
+ * instrumented in STRICT. */
+static const int N_API_KEYS = (int)(sizeof(API_KEYS) / sizeof(API_KEYS[0]));
 
 static const char *PARAM_KEYS[] = {"name", "type", "nullable", "extent"};
-#define N_PARAM_KEYS ((int)(sizeof(PARAM_KEYS) / sizeof(PARAM_KEYS[0])))
+static const int N_PARAM_KEYS =
+    (int)(sizeof(PARAM_KEYS) / sizeof(PARAM_KEYS[0]));
 
 static const char *FAILURE_KEYS[] = {"result_code", "conditions"};
-#define N_FAILURE_KEYS ((int)(sizeof(FAILURE_KEYS) / sizeof(FAILURE_KEYS[0])))
+static const int N_FAILURE_KEYS =
+    (int)(sizeof(FAILURE_KEYS) / sizeof(FAILURE_KEYS[0]));
 
 static const char *DYNAMIC_KEYS[] = {"checks", "limitations"};
-#define N_DYNAMIC_KEYS ((int)(sizeof(DYNAMIC_KEYS) / sizeof(DYNAMIC_KEYS[0])))
+static const int N_DYNAMIC_KEYS =
+    (int)(sizeof(DYNAMIC_KEYS) / sizeof(DYNAMIC_KEYS[0]));
 
 /* Original 29-name baseline. */
 static const char *REQUIRED_NAMES[] = {
@@ -66,7 +71,8 @@ static const char *REQUIRED_NAMES[] = {
     "printf", "fprintf", "snprintf", "sprintf", "scanf", "fscanf", "sscanf",
     "fopen", "fclose", "fread", "fwrite"
 };
-#define N_REQUIRED ((int)(sizeof(REQUIRED_NAMES) / sizeof(REQUIRED_NAMES[0])))
+static const int N_REQUIRED =
+    (int)(sizeof(REQUIRED_NAMES) / sizeof(REQUIRED_NAMES[0]));
 
 /* Expanded P0 coverage (must be a subset of the names present in the JSON). */
 static const char *P0_REQUIRED_NAMES[] = {
@@ -75,20 +81,23 @@ static const char *P0_REQUIRED_NAMES[] = {
     "strcmp", "strncmp", "snprintf", "vsnprintf",
     "malloc_s", "calloc_s", "realloc_s", "free_s", "aligned_alloc_s"
 };
-#define N_P0 ((int)(sizeof(P0_REQUIRED_NAMES) / sizeof(P0_REQUIRED_NAMES[0])))
+static const int N_P0 =
+    (int)(sizeof(P0_REQUIRED_NAMES) / sizeof(P0_REQUIRED_NAMES[0]));
 
 /* The six additive entries that must carry explicit semantic evidence. */
 static const char *EXTENDED_P0_NAMES[] = {
     "vsnprintf", "malloc_s", "calloc_s", "realloc_s", "free_s",
     "aligned_alloc_s"
 };
-#define N_EXTENDED ((int)(sizeof(EXTENDED_P0_NAMES) / sizeof(EXTENDED_P0_NAMES[0])))
+static const int N_EXTENDED =
+    (int)(sizeof(EXTENDED_P0_NAMES) / sizeof(EXTENDED_P0_NAMES[0]));
 
 /* Checked allocators keep their own names in implementation_symbols. */
 static const char *CHECKED_ALLOCATORS[] = {
     "malloc_s", "calloc_s", "realloc_s", "free_s", "aligned_alloc_s"
 };
-#define N_CHECKED ((int)(sizeof(CHECKED_ALLOCATORS) / sizeof(CHECKED_ALLOCATORS[0])))
+static const int N_CHECKED =
+    (int)(sizeof(CHECKED_ALLOCATORS) / sizeof(CHECKED_ALLOCATORS[0]));
 
 /* Exactly the five categories from Agent 1's issue #22 comment. */
 static const char *ALLOWED_DIAGNOSTICS[] = {
@@ -98,7 +107,8 @@ static const char *ALLOWED_DIAGNOSTICS[] = {
     "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M",
     "[CPLUS-SAFE-REALLOC] realloc warnings"
 };
-#define N_ALLOWED_DIAG ((int)(sizeof(ALLOWED_DIAGNOSTICS) / sizeof(ALLOWED_DIAGNOSTICS[0])))
+static const int N_ALLOWED_DIAG =
+    (int)(sizeof(ALLOWED_DIAGNOSTICS) / sizeof(ALLOWED_DIAGNOSTICS[0]));
 
 static const char *SEMANTIC_ASPECTS[] = {
     "argument_types", "read_write_behavior", "buffer_sizes",
@@ -107,7 +117,8 @@ static const char *SEMANTIC_ASPECTS[] = {
     "returned_pointer_lifetime", "allocation_behavior", "error_behavior",
     "reallocation_semantics"
 };
-#define N_ASPECTS ((int)(sizeof(SEMANTIC_ASPECTS) / sizeof(SEMANTIC_ASPECTS[0])))
+static const int N_ASPECTS =
+    (int)(sizeof(SEMANTIC_ASPECTS) / sizeof(SEMANTIC_ASPECTS[0]));
 
 /* Marker groups (all lowercase) for EXTENDED_TEXT_MARKERS in the Python test.
  * Each group is NULL-terminated; ASPECT_MARKER_NAMES[i] names its aspect. */
@@ -129,7 +140,8 @@ static const char *ASPECT_MARKER_NAMES[] = {
     "read_write_behavior", "source_dest_relationships", "borrowed_args",
     "returned_pointer_lifetime", "allocation_behavior", "reallocation_semantics"
 };
-#define N_MARKER_GROUPS ((int)(sizeof(MARKER_GROUPS) / sizeof(MARKER_GROUPS[0])))
+static const int N_MARKER_GROUPS =
+    (int)(sizeof(MARKER_GROUPS) / sizeof(MARKER_GROUPS[0]));
 
 /* Seen contract names and the value backing each (collected while scanning apis). */
 static const char *g_seen[256];
@@ -151,11 +163,14 @@ static void fail(const char *msg) {
 #define FAIL(...) do { snprintf(g_msg, sizeof(g_msg), __VA_ARGS__); return 1; } while (0)
 
 static int in_set(const char *s, const char *const *set, int n) {
+    /* `items` is a local alias of the caller-owned, NUL-terminated pointer
+     * table; the caller passes both the table and its element count. */
+    const char *const *items = set;
     int i;
-    if (s == NULL)
+    if (s == NULL || items == NULL || n <= 0)
         return 0;
     for (i = 0; i < n; i++)
-        if (strcmp(s, set[i]) == 0)
+        if (strcmp(s, items[i]) == 0)
             return 1;
     return 0;
 }
@@ -172,25 +187,39 @@ static int has_nonspace(const char *s) {
 }
 
 static void list_add(char *buf, size_t cap, const char *s) {
-    size_t len = strlen(buf);
-    int need;
+    /* snprintf() is a fortified macro on this platform: a dynamic
+     * `buf + len` or a caller-supplied capacity in its argument list cannot
+     * be instrumented in STRICT.  Render the fragment in a fixed-size
+     * temporary with a literal format, then append it with an explicitly
+     * computed room.  Both callers use a 1024-byte destination. */
+    char piece[1024];
+    size_t len, room;
+    if (buf == NULL || cap == 0)
+        return;
+    len = strlen(buf);
+    if (len >= cap)
+        return;
+    room = cap - len - 1;
     if (len == 0)
-        need = snprintf(buf + len, cap - len, "'%s'", s);
+        (void)snprintf(piece, sizeof(piece), "'%s'", s);
     else
-        need = snprintf(buf + len, cap - len, ", '%s'", s);
-    (void)need; /* bounded by cap; these buffers are only used on failure */
+        (void)snprintf(piece, sizeof(piece), ", '%s'", s);
+    strncat(buf, piece, room);
 }
 
 static void sort_names(const char **arr, int n) {
+    const char **items = arr;
     int i, j;
+    if (items == NULL || n <= 1)
+        return;
     for (i = 1; i < n; i++) {
-        const char *key = arr[i];
+        const char *key = items[i];
         j = i;
-        while (j > 0 && strcmp(arr[j - 1], key) > 0) {
-            arr[j] = arr[j - 1];
+        while (j > 0 && strcmp(items[j - 1], key) > 0) {
+            items[j] = items[j - 1];
             j--;
         }
-        arr[j] = key;
+        items[j] = key;
     }
 }
 
@@ -235,16 +264,19 @@ static int is_list(yyjson_val *v) {
  * yyjson_obj_get so the comparison is set-based exactly like Python's set(obj). */
 static int exact_keys(yyjson_val *obj, const char *const *expected, int n,
                       const char *where) {
+    const char *const *keys = expected;
     char missing[1024], extra[1024];
     yyjson_obj_iter it;
     yyjson_val *k;
     int i;
     if (obj == NULL || !yyjson_is_obj(obj))
         FAIL("%s: expected object", where);
+    if (keys == NULL || n <= 0)
+        FAIL("%s: expected a non-empty key set", where);
     missing[0] = extra[0] = '\0';
     for (i = 0; i < n; i++)
-        if (yyjson_obj_get(obj, expected[i]) == NULL)
-            list_add(missing, sizeof(missing), expected[i]);
+        if (yyjson_obj_get(obj, keys[i]) == NULL)
+            list_add(missing, sizeof(missing), keys[i]);
     it = yyjson_obj_iter_with(obj);
     while ((k = yyjson_obj_iter_next(&it)) != NULL) {
         const char *key = yyjson_get_str(k);
@@ -391,9 +423,12 @@ static int load_contract(const char *path) {
 static int parse_raw(const char *text, size_t len) {
     yyjson_read_err rerr;
     yyjson_doc *doc = yyjson_read_opts((char *)text, len, YYJSON_READ_NOFLAG, NULL, &rerr);
-    if (doc == NULL)
-        FAIL("invalid JSON in compiler_libc_contracts.json: %s",
-             rerr.msg != NULL ? rerr.msg : "parse failed");
+    if (doc == NULL) {
+        /* Keep the fallback selection out of the FAIL macro: arithmetic and
+         * conversions in a macro argument cannot be instrumented in STRICT. */
+        const char *detail = (rerr.msg != NULL) ? rerr.msg : "parse failed";
+        FAIL("invalid JSON in compiler_libc_contracts.json: %s", detail);
+    }
     g_raw = doc;
     return 0;
 }
@@ -405,10 +440,18 @@ static int run_checks(const char *path) {
     json doc;
     json_view root_view;
     yyjson_doc *raw;
-    yyjson_val *root, *apis, *semantics, *aspects, *symbols, *per_api_keys;
+    /* Keep pointer declarations separate: the C+ rewriter wraps a
+     * null-checked pointer in a statement-expression macro, which cannot
+     * appear in a multi-declarator declaration in the lowered C. */
+    yyjson_val *root;
+    yyjson_val *apis;
+    yyjson_val *semantics;
+    yyjson_val *aspects;
+    yyjson_val *symbols;
+    yyjson_val *per_api_keys;
     char where[128], sub[160];
     size_t len, idx;
-    int i;
+    int i, api_index;
 
     g_err = &err;
     if (load_contract(path) != 0)
@@ -478,9 +521,11 @@ static int run_checks(const char *path) {
         while ((k = yyjson_obj_iter_next(&it)) != NULL) {
             const char *desc = jstr(yyjson_obj_iter_get_val(k));
             const char *key = yyjson_get_str(k);
-            if (desc == NULL || !has_nonspace(desc))
+            if (desc == NULL || !has_nonspace(desc)) {
+                const char *shown = (key != NULL) ? key : "(non-string key)";
                 FAIL("contract_semantics.aspects[%s]: expected non-empty string",
-                     key != NULL ? key : "(non-string key)");
+                     shown);
+            }
         }
     }
 
@@ -495,11 +540,18 @@ static int run_checks(const char *path) {
     /* Full scan of every API entry. */
     for (idx = 0; idx < yyjson_arr_size(apis); idx++) {
         yyjson_val *api = yyjson_arr_get(apis, idx);
-        yyjson_val *params, *failure, *dyn, *tr;
+        yyjson_val *params;
+        yyjson_val *failure;
+        yyjson_val *dyn;
+        yyjson_val *tr;
         const char *name;
         size_t pi, ni;
+        int param_index;
 
-        snprintf(where, sizeof(where), "apis[%d]", (int)idx);
+        /* Narrow outside the fortified snprintf macro: a conversion in a
+         * macro argument cannot be instrumented in STRICT. */
+        api_index = (int)idx;
+        snprintf(where, sizeof(where), "apis[%d]", api_index);
         if (exact_keys(api, API_KEYS, N_API_KEYS, where) != 0) return 1;
 
         name = jstr(yyjson_obj_get(api, "name"));
@@ -519,7 +571,8 @@ static int run_checks(const char *path) {
             yyjson_val *p = yyjson_arr_get(params, pi);
             const char *pn, *pt, *pe;
             int flag;
-            snprintf(sub, sizeof(sub), "%s.params[%d]", where, (int)pi);
+            param_index = (int)pi;
+            snprintf(sub, sizeof(sub), "%s.params[%d]", where, param_index);
             if (exact_keys(p, PARAM_KEYS, N_PARAM_KEYS, sub) != 0) return 1;
             pn = jstr(yyjson_obj_get(p, "name"));
             if (pn == NULL || !has_nonspace(pn))
@@ -566,9 +619,10 @@ static int run_checks(const char *path) {
                 FAIL("%s.diagnostics: expected a list", where);
             for (ni = 0; ni < yyjson_arr_size(diags); ni++) {
                 const char *d = jstr(yyjson_arr_get(diags, ni));
-                if (d == NULL || !in_set(d, ALLOWED_DIAGNOSTICS, N_ALLOWED_DIAG))
-                    FAIL("%s.diagnostics: unknown category '%s'", where,
-                         d != NULL ? d : "(non-string)");
+                if (d == NULL || !in_set(d, ALLOWED_DIAGNOSTICS, N_ALLOWED_DIAG)) {
+                    const char *shown = (d != NULL) ? d : "(non-string)";
+                    FAIL("%s.diagnostics: unknown category '%s'", where, shown);
+                }
             }
         }
 
