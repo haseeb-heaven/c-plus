@@ -18,11 +18,21 @@
 intmax_t cplus_wcstoimax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base) {
     cplus_libc_log("wcstoimax","enter");
     if (!nptr) { if (endptr) *endptr = NULL; errno = EINVAL; return 0; }
+    if (base < 0 || base == 1 || base > 36) {
+        if (endptr) *endptr = (wchar_t *)nptr;
+        errno = EINVAL;
+        return 0;
+    }
     return wcstoimax(nptr, endptr, base);
 }
 
 uintmax_t cplus_wcstoumax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base) {
     cplus_libc_log("wcstoumax","enter");
     if (!nptr) { if (endptr) *endptr = NULL; errno = EINVAL; return 0; }
+    if (base < 0 || base == 1 || base > 36) {
+        if (endptr) *endptr = (wchar_t *)nptr;
+        errno = EINVAL;
+        return 0;
+    }
     return wcstoumax(nptr, endptr, base);
 }

@@ -18,11 +18,21 @@ imaxdiv_t cplus_imaxdiv(intmax_t n,intmax_t d){ cplus_libc_log("imaxdiv","enter"
 intmax_t cplus_strtoimax(const char *restrict nptr, char **restrict endptr, int base) {
     cplus_libc_log("strtoimax","enter");
     if (!nptr) { if (endptr) *endptr = NULL; errno = EINVAL; return 0; }
+    if (base < 0 || base == 1 || base > 36) {
+        if (endptr) *endptr = (char *)nptr;
+        errno = EINVAL;
+        return 0;
+    }
     return strtoimax(nptr, endptr, base);
 }
 uintmax_t cplus_strtoumax(const char *restrict nptr, char **restrict endptr, int base) {
     cplus_libc_log("strtoumax","enter");
     if (!nptr) { if (endptr) *endptr = NULL; errno = EINVAL; return 0; }
+    if (base < 0 || base == 1 || base > 36) {
+        if (endptr) *endptr = (char *)nptr;
+        errno = EINVAL;
+        return 0;
+    }
     return strtoumax(nptr, endptr, base);
 }
 int cplus_mblen(const char *s, size_t n) {
