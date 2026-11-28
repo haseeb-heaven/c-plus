@@ -825,10 +825,20 @@ static int cplus_retired_address_stale(const void *p) {
 }
 
 #ifdef CPLUS_POSIX
-static pthread_mutex_t cplus_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
-static void cplus_alloc_lock(void) { pthread_mutex_lock(&cplus_alloc_mutex); }
+/* One logical critical section, but readers (the common liveness/bounds
+ * lookup path) proceed concurrently. Mutators still serialize exclusively,
+ * so cross-thread free/double-free detection is unchanged. This is the
+ * lock-sharded fast path for --safety=strict without changing any C layout. */
+static pthread_rwlock_t cplus_alloc_mutex = PTHREAD_RWLOCK_INITIALIZER;
+static void cplus_alloc_lock(void) { pthread_rwlock_wrlock(&cplus_alloc_mutex); }
 static void cplus_alloc_unlock(void) {
-  pthread_mutex_unlock(&cplus_alloc_mutex);
+  pthread_rwlock_unlock(&cplus_alloc_mutex);
+}
+static void cplus_alloc_read_lock(void) {
+  pthread_rwlock_rdlock(&cplus_alloc_mutex);
+}
+static void cplus_alloc_read_unlock(void) {
+  pthread_rwlock_unlock(&cplus_alloc_mutex);
 }
 
 /* fork() in a multi-threaded process inherits only the calling thread.  If
@@ -842,7 +852,10 @@ static void cplus_alloc_unlock(void) {
 static void cplus_atfork_prepare(void) { cplus_alloc_lock(); }
 static void cplus_atfork_parent(void) { cplus_alloc_unlock(); }
 static void cplus_atfork_child(void) {
-  pthread_mutex_init(&cplus_alloc_mutex, NULL);
+  /* The prepare handler left the read-write lock write-held by this very
+   * thread. Release the inherited lock state before reinitializing it. */
+  pthread_rwlock_unlock(&cplus_alloc_mutex);
+  pthread_rwlock_init(&cplus_alloc_mutex, NULL);
 }
 __attribute__((constructor)) static void cplus_atfork_install(void) {
   pthread_atfork(cplus_atfork_prepare, cplus_atfork_parent, cplus_atfork_child);
@@ -850,6 +863,8 @@ __attribute__((constructor)) static void cplus_atfork_install(void) {
 #else
 static void cplus_alloc_lock(void) {}
 static void cplus_alloc_unlock(void) {}
+static void cplus_alloc_read_lock(void) {}
+static void cplus_alloc_read_unlock(void) {}
 #endif
 
 static size_t cplus_hash(const void *p) {
@@ -2136,9 +2151,9 @@ void cplus_check_live(const void *ptr) {
   if (!ptr)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "dangling pointer", NULL, 0,
                       "null pointer is not a live allocation");
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   if (!slot)
     cplus_log(CPLUS_LOG_WARN, "dangling pointer query ptr=%p", ptr);
   if (!slot)
@@ -2151,10 +2166,10 @@ size_t cplus_alloc_bytes(const void *ptr) {
   if (!ptr)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "null pointer has no allocation length");
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
   size_t bytes = slot ? slot->size : 0;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   if (!slot)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "pointer is not a live C+ allocation");
@@ -2166,26 +2181,26 @@ size_t cplus_alloc_bytes(const void *ptr) {
 uint64_t cplus_allocation_generation(const void *ptr) {
   if (!ptr)
     return 0u;
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
   uint64_t gen = slot ? slot->generation : 0u;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   return gen;
 }
 
 uint64_t cplus_epoch(void) {
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   uint64_t epoch = cplus_generation;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   return epoch;
 }
 
 int cplus_address_retired(const void *ptr) {
   if (!ptr)
     return 0;
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   int retired = cplus_retired_generation(ptr) != 0u;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   return retired;
 }
 
@@ -2194,9 +2209,9 @@ int cplus_address_retired(const void *ptr) {
  * entry; the evicted address is then no longer covered by the
  * ledger. */
 int cplus_retired_ledger_full(void) {
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   int full = cplus_retired_wrapped;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   return full;
 }
 
@@ -2644,10 +2659,10 @@ int cplus_interior_valid(const void *ptr, uint64_t key) {
   uint32_t klass = 0u;
   if (cplus_lowfat_resolve(ptr, &base, &size, &gen, &tag, &klass, NULL))
     return gen == key ? 1 : 0;
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   cplus_live_slot *slot = cplus_shadow_find_locked(ptr);
   int ok = slot != NULL && slot->generation == key;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   return ok ? 1 : 0;
 }
 
@@ -2657,10 +2672,10 @@ int cplus_lowfat_class_of(const void *ptr) {
   uint32_t klass = 0u;
   if (cplus_lowfat_resolve(ptr, NULL, NULL, NULL, NULL, &klass, NULL))
     return (int)klass;
-  cplus_alloc_lock();
+  cplus_alloc_read_lock();
   cplus_live_slot *slot = cplus_shadow_find_locked(ptr);
   int result = slot ? (int)slot->size_class : -1;
-  cplus_alloc_unlock();
+  cplus_alloc_read_unlock();
   return result;
 }
 
