@@ -114,6 +114,16 @@ struct DeclScope {
   size_t parenOpen = kNPos;
 };
 
+/// Extent of one fixed-size array declaration, with the byte span in which
+/// that declaration is visible.  A flat name-keyed map lets a later array of
+/// the same name in another function overwrite this extent (issue #236).
+struct ScopedArrayExtent {
+  std::string name;
+  size_t extent = 0;
+  size_t from = 0; ///< first byte offset where the declaration is visible
+  size_t to = 0;   ///< last byte offset of the enclosing scope
+};
+
 /// A struct/class field whose declared type is a C+ class.  Needed to lower
 /// member calls through a path (`w.c.add(5)`, `a.b.c.add(5)`) when the field
 /// name itself is not a local in `varClasses_`.
@@ -996,8 +1006,28 @@ private:
       } else if (ts[inner].kind == TokKind::Number) {
         len = static_cast<size_t>(strtoull(ts[inner].text.c_str(), nullptr, 0));
       }
-      if (len != kNPos && len > 0)
+      if (len != kNPos && len > 0) {
         arrays_[ts[i].text] = len;
+        // Keep a scope-resolved extent alongside the flat map: the latter is
+        // still exported for the static checker, but every consumer that
+        // decides a bound at a use site must use the visible declaration.
+        const size_t last = ts[ts.size() - 1].offset +
+                            ts[ts.size() - 1].text.size();
+        DeclScope scope = scopeForDecl(i);
+        ScopedArrayExtent e;
+        e.name = ts[i].text;
+        e.extent = len;
+        e.from = ts[i].offset;
+        e.to = last;
+        if (scope.open != kNPos) {
+          const size_t openOffset = ts[scope.open].offset;
+          if (e.from < openOffset) e.from = openOffset; // parameter
+          e.to = scope.close == kNPos ? last
+                                      : ts[scope.close].offset +
+                                            ts[scope.close].text.size();
+        }
+        scopedArrays_.push_back(std::move(e));
+      }
     }
   }
 
@@ -1653,9 +1683,13 @@ private:
   }
 
   std::string lengthExprFor(const std::string &name, size_t pos) const {
-    auto it = arrays_.find(name);
-    if (it != arrays_.end())
-      return "(" + std::to_string(it->second) + ")";
+    const ScopedArrayExtent *best = nullptr;
+    for (const ScopedArrayExtent &e : scopedArrays_)
+      if (e.name == name && e.from <= ts[pos].offset &&
+          ts[pos].offset <= e.to && (!best || e.from > best->from))
+        best = &e;
+    if (best != nullptr)
+      return "(" + std::to_string(best->extent) + ")";
     for (const auto &entry : dynamicLengths_)
       if (entry.pos < pos && entry.name == name &&
           isConstantSizeExpr(entry.exprFrom, entry.exprTo))
@@ -1941,7 +1975,13 @@ private:
   bool tryEmitArrayLen(size_t i) {
     if (ts[i].kind != TokKind::Identifier)
       return false;
-    bool isStatic = arrays_.count(ts[i].text) != 0;
+    const ScopedArrayExtent *staticArray = nullptr;
+    for (const ScopedArrayExtent &e : scopedArrays_)
+      if (e.name == ts[i].text && e.from <= ts[i].offset &&
+          ts[i].offset <= e.to &&
+          (!staticArray || e.from > staticArray->from))
+        staticArray = &e;
+    bool isStatic = staticArray != nullptr;
     bool isDynamic = dynamicPointers_.count(ts[i].text) != 0;
     size_t dot = ts.nextSig(i);
     if (!ts.isPunct(dot, "."))
@@ -1966,7 +2006,7 @@ private:
       return true;
     }
     if (isStatic) {
-      emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
+      emit("(" + std::to_string(staticArray->extent) + ")");
     } else {
       std::string expr = lengthExprFor(ts[i].text, i);
       bool released = false;
@@ -2127,6 +2167,7 @@ private:
   std::vector<VarBinding> varBindings_;
   std::map<std::string, FieldType> fieldTypes_;
   std::map<std::string, size_t> arrays_;
+  std::vector<ScopedArrayExtent> scopedArrays_;
   std::set<std::string> dynamicPointers_;
   struct DynamicLength {
     size_t pos;
@@ -4987,6 +5028,80 @@ void checkLexicalPointerSafety(const std::vector<Token> &toks,
   checkUnprovenPointerDerefs(ts, diags, filename, pointerBytes);
 }
 
+/// Fixed-size arrays in the lowered C with the byte span where each name is
+/// visible.  The rewriter exports a translation-unit-wide name -> extent map;
+/// a later declaration of the same name in an unrelated function overwrites
+/// the earlier extent, so a dynamic subscript of the smaller array was checked
+/// against the larger bound (issue #236).  Resolve the extent from the
+/// declaration actually in scope at the access instead.
+static std::vector<ScopedArrayExtent>
+collectScopedArrayExtents(const std::string &source) {
+  const std::vector<Token> toks = lexCPlus(source);
+  std::vector<size_t> sig;
+  for (size_t i = 0; i < toks.size(); ++i)
+    if (!isTriviaTok(toks[i]) && toks[i].kind != TokKind::EndOfFile)
+      sig.push_back(i);
+  const std::set<std::string> typeNames = collectDeclTypeNames(toks, sig);
+  std::vector<ScopedArrayExtent> out;
+  for (size_t si = 1; si < sig.size(); ++si) {
+    if (!(toks[sig[si]].kind == TokKind::Punct && toks[sig[si]].text == "[") ||
+        toks[sig[si - 1]].kind != TokKind::Identifier)
+      continue;
+    if (!isArrayDeclaratorBracket(toks, sig, si, typeNames))
+      continue;
+    size_t extent = 0;
+    const size_t inner = si + 1;
+    if (inner < sig.size() && toks[sig[inner]].kind == TokKind::Number) {
+      extent = static_cast<size_t>(
+          strtoull(toks[sig[inner]].text.c_str(), nullptr, 0));
+    } else if (inner < sig.size() && toks[sig[inner]].text == "]") {
+      // Empty brackets: infer the extent from the initialiser.
+      size_t eq = inner;
+      while (eq < sig.size() &&
+             !(toks[sig[eq]].kind == TokKind::Punct &&
+               toks[sig[eq]].text == "="))
+        ++eq;
+      const size_t brace = eq + 1;
+      if (brace < sig.size() && toks[sig[brace]].kind == TokKind::Punct &&
+          toks[sig[brace]].text == "{") {
+        int depth = 0;
+        size_t commas = 0;
+        bool any = false;
+        for (size_t k = brace + 1; k < sig.size(); ++k) {
+          const Token &u = toks[sig[k]];
+          if (u.kind != TokKind::Punct) { any = true; continue; }
+          if (u.text == "{") { ++depth; any = true; }
+          else if (u.text == "}") {
+            if (depth == 0) break;
+            --depth;
+          } else if (u.text == "," && depth == 0) ++commas;
+        }
+        extent = any ? commas + 1 : 0;
+      }
+    }
+    if (extent == 0) continue;
+    const NonnullScope scope = scopeForArrayDecl(toks, sig, si - 1);
+    if (scope.inParens && scope.open == kNPos) continue; // prototype parameter
+    if (scope.open != kNPos && isAggregateBody(toks, sig, scope.open))
+      continue; // aggregate field, not a standalone binding
+    ScopedArrayExtent d;
+    d.name = toks[sig[si - 1]].text;
+    d.extent = extent;
+    const size_t declOffset = toks[sig[si - 1]].offset;
+    if (scope.open == kNPos) {
+      d.from = declOffset;
+      d.to = source.size();
+    } else {
+      const size_t openOffset = toks[sig[scope.open]].offset;
+      d.from = declOffset < openOffset ? openOffset : declOffset;
+      d.to = scope.close == kNPos ? source.size()
+                                  : endOfToken(toks[sig[scope.close]]);
+    }
+    out.push_back(std::move(d));
+  }
+  return out;
+}
+
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
     const std::map<std::string, size_t> &arrayLengths) {
@@ -5075,6 +5190,8 @@ std::string instrumentDynamicArrayBounds(
   bool haveSizeMul = false;
 
   if (!arrayLengths.empty()) {
+    const std::vector<ScopedArrayExtent> scoped =
+        collectScopedArrayExtents(source);
     std::vector<Token> toks = lexCPlus(source);
     auto significant = [&](size_t i) -> bool {
       return toks[i].kind != TokKind::Whitespace &&
@@ -5088,9 +5205,15 @@ std::string instrumentDynamicArrayBounds(
     for (size_t i = 0; i < toks.size(); ++i) {
       if (toks[i].kind != TokKind::Identifier)
         continue;
-      auto ai = arrayLengths.find(toks[i].text);
-      if (ai == arrayLengths.end())
+      if (arrayLengths.find(toks[i].text) == arrayLengths.end())
         continue;
+      const ScopedArrayExtent *decl = nullptr;
+      for (const ScopedArrayExtent &d : scoped)
+        if (d.name == toks[i].text && d.from <= toks[i].offset &&
+            toks[i].offset <= d.to && (!decl || d.from > decl->from))
+          decl = &d;
+      if (decl == nullptr)
+        continue; // no visible declaration: never borrow another scope's bound
       size_t open = nextSig(i + 1);
       if (open == kNPos || toks[open].text != "[")
         continue;
@@ -5128,7 +5251,7 @@ std::string instrumentDynamicArrayBounds(
       insertions.push_back({idxBegin, outer, 0,
                             "__cplus_bounds_check((size_t)(", 0});
       insertions.push_back({toks[close].offset, outer, 2,
-                            "), " + std::to_string(ai->second) + ", \"" +
+                            "), " + std::to_string(decl->extent) + ", \"" +
                                 toks[i].text + "\")", 0});
     }
   }
