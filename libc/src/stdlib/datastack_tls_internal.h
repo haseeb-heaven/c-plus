@@ -11,7 +11,11 @@
 extern "C" {
 #endif
 
-typedef struct stdlib_datastack_tls {
+/* Use the same struct tag as stdlib/datastack.hp.  The two headers are used in
+ * different translation units but describe the same stdlib_tls_datastack
+ * object; distinct tags made the cross-TU types incompatible even though the
+ * layout matched.  The typedef name is kept for the internal C callers. */
+typedef struct stdlib_datastack {
     unsigned char *base;
     unsigned char *top;
     size_t capacity;
