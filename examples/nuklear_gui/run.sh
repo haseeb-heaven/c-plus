@@ -2,6 +2,13 @@
 # Build and verify the real Nuklear GUI app (modern C+ via C ABI wrapper).
 # Prints: NUKLEAR_GUI_TEST <cases> <pass> <fail>
 set -u
+# Resolve CPLUS_BIN to an absolute path before changing directory.
+if [ -n "${CPLUS_BIN:-}" ]; then
+  case "$CPLUS_BIN" in
+    /*) ;;
+    *) CPLUS_BIN=$(CDPATH= cd -- "$(dirname -- "$CPLUS_BIN")" && pwd)/$(basename -- "$CPLUS_BIN") ;;
+  esac
+fi
 D=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$D" || exit 2
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
