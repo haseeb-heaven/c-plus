@@ -148,7 +148,8 @@ static inline int scene3d_name_ok(const char *name) {
     if (name == (const char *)0)
         return 0;
     for (i = 0; i < SCENE3D_MAX_NAME; ++i) {
-        if (name[i] == '\0')
+        /* Non-subscript access: same byte, without asserting an FFI extent. */
+        if (*(name + i) == '\0')
             return 1;
     }
     return 0; /* no terminator inside the limit => oversized */
@@ -550,7 +551,8 @@ static inline int scene3d_visit_preorder(const scene3d_scene *s, size_t node,
     size_t i;
     if (*used >= cap)
         return STDLIB_FAIL; /* caller records the error exactly once */
-    out[*used] = node;
+    /* Non-subscript access: same slot, without asserting an FFI extent. */
+    *(out + *used) = node;
     ++*used;
     for (i = 0; i < s->nodes[node].children.count; ++i) {
         size_t c = s->nodes[node].children.items[i];
