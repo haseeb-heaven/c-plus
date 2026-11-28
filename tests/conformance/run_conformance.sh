@@ -150,7 +150,8 @@ MISMATCHED=0
 HARD_FAIL=0
 GATES=0
 
-while IFS=$'\t' read -r id c_file rust_file expected_c expected_rust mechanism_c mechanism_rust clean_run_outcome; do
+TAB=$(printf '\t')
+while IFS="$TAB" read -r id c_file rust_file expected_c expected_rust mechanism_c mechanism_rust clean_run_outcome; do
   [ -n "$id" ] || continue
   GATES=$((GATES + 1))
 
