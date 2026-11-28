@@ -1,5 +1,83 @@
 # Final API-closure evidence
 
+## Fresh regression re-run (2026-11-28) — current record
+
+Captured in an isolated worktree at HEAD
+`c0f9aa7f4411ff57547334be551148af9422690b`. Every number below comes from a
+command actually executed for this pass; the 2026-11-23 record below it is
+historical and superseded. Environment for every command, from the repo root:
+
+```sh
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+export CPLUS_CLANG=/usr/bin/clang
+export CPLUS_BIN=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build-final/c+
+unset SDKROOT
+```
+
+| Scope | Exact command | Exit | Final line / result |
+| --- | --- | ---: | --- |
+| #214 | `sh tests/stdlib/issue214/run.sh` | 0 | `ISSUE214 SUITE PASS` (1 suite passed) |
+| #215 | `sh tests/stdlib/issue215/run.sh` | 0 | `ISSUE215 SUITE PASS` (1 suite passed) |
+| #216 | `sh tests/stdlib/issue216/run.sh` | 0 | `ISSUE216 SUITE PASS` (1 suite passed) |
+| #217/#218/#219 | `sh tests/stdlib/run_stdlib_tests.sh issue21` | 0 | `C+ stdlib tests: 3 passed, 0 failed, 0 skipped` |
+| #220 | `sh tests/stdlib/run_stdlib_tests.sh audio_heap_stability` | 1 | `C+ stdlib tests: 0 passed, 1 failed, 0 skipped` (**FAIL**, compile) |
+| #221 | `sh tests/stdlib/run_stdlib_tests.sh net_sigpipe` | 0 | `C+ stdlib tests: 1 passed, 0 failed, 0 skipped` |
+| #222 (async) | `sh tests/stdlib/run_stdlib_tests.sh async_reentrant_drop` | 1 | `C+ stdlib tests: 0 passed, 1 failed, 0 skipped` (**FAIL**, compile) |
+| #222 (multi-TU) | `sh tests/stdlib/run_stdlib_tests.sh multi_tu` | 0 | `C+ stdlib tests: 2 passed, 0 failed, 0 skipped` (`multi_tu`, `multi_tu_meta`) |
+| #211 (libc) | `sh tests/libc/run_libc_tests.sh` | 0 | `libc tests: 112 passed, 0 failed` (note below) |
+| #212/#213 (CRT) | `sh tests/crt/unit/run_unit_tests.sh` | 0 | `crt unit tests: 103 passed, 0 failed` |
+| All suites | `sh tests/run_all_evidence.sh` | 1 | `evidence aggregate: 22 passed, 6 failed` |
+
+Details that affect the verdict:
+
+- #211: the final libc run contains `ok test_strncat_bounded_overflow.c`. The
+  first invocation from a clean worktree was `libc tests: 101 passed, 11 failed`
+  (exit 1); all 11 were build failures with
+  `clang: error: no such file or directory: 'build/safe/libcplus_safecrt.a'`,
+  not assertion failures and not the #211 test. The CRT runner builds that
+  archive; re-running the identical libc command afterwards gave 112/0.
+- #212/#213: the CRT runner prints only a summary, so the three binaries in
+  `build/safe/unit/` were also executed directly (all exit 0):
+  `issue212_scanfmt_rewrite: ok`, `issue212_scanf_c_capacity: ok`,
+  `test_issue213_source_scan_bound: ok`. The last also emits the expected
+  `[CPLUS-SAFE] strnlen_s: refused before safeclib: scan bound 256 > proven
+  capacity 16 (ESNOSPC 406)` diagnostic before `ok`.
+- #217–#219: the `issue21` run prints `ok issue217_view_tombstone_reuse`,
+  `ok issue218_lifetime_bounds`, `ok issue219_pool_alignment_generations`.
+  The aggregate also reports `ok issue214`, `ok issue215`, `ok issue216` and
+  `ok issue217_219: C+ stdlib tests: 3 passed, 0 failed, 0 skipped`.
+- #220/#222 FAIL under the standard runner: `audio_heap_stability.build.log`
+  and `async_reentrant_drop.build.log` both end in
+  `error: failed to compile instrumented C+ runtime`, preceded by
+  `-lminiaudio: 'linker' input unused [-Werror,-Wunused-command-line-argument]`
+  (plus the three `-Wl,-framework` pairs) and
+  `-luv: 'linker' input unused [-Werror,-Wunused-command-line-argument]`.
+  Diagnostic only (not a replacement gate): with the same driver flags used by
+  the issue215/216 suites (`--default --no-werror --sanitize=none` plus the
+  miniaudio / libuv dependency flags) both sources build, run with exit 0 and
+  match their `.expected` files exactly (`audio-heap-accounting 1`,
+  `reentrant-refs 1`). The standard runner remains FAIL.
+- Aggregate: `sh tests/run_all_evidence.sh` exited 1,
+  `evidence aggregate: 22 passed, 6 failed`. Failures:
+  `abi-layouts` — `./build/c+: No such file or directory`;
+  `integration` — `integration suite: 3 passed, 5 failed` (missing `./build/c+`);
+  `rust-vs-cplus` — `0 matched, 0 documented differences, 0 both-skip, 6 failures`
+  (`rustc: command not found`);
+  `cplus-rust-gates` — `conformance: 5 matched, 7 mismatched (12 gates)`, case 12
+  C executable segfaulted and Rust failed to compile;
+  `contract-validator` — `tests/libc/validate_contracts.cp` rejected with
+  `[CPLUS-LIFETIME] ... null pointer argument` diagnostics;
+  `contract-alignment` — native alignment tool build blocked (missing
+  `./build/c+`), so the runner reports `No such file or directory`.
+  The aggregate does not run the #220/#221/#222 sources.
+
+These are observed results for one revision and one prebuilt compiler, not
+proof of memory safety, absence of UB, or Rust equivalence. Remote CI, Windows
+x86 ABI, sanitizer matrices and live-game results remain **UNVERIFIED**. No
+test was edited, skipped or relaxed to obtain these numbers.
+
+## Historical run (2026-11-23) — superseded by the section above
+
 - Run started (UTC): `2026-11-23T01:44:16Z`
 - Run finished (UTC): `2026-11-23T01:53:27Z`
 - Repository branch: `agent/modern-stdlib`

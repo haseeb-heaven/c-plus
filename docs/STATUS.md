@@ -207,9 +207,15 @@ unverified remote gates remain.
 
 Nine previously open runtime/bounds findings are now fixed in tree, each with
 a deterministic regression added under `tests/libc/`, `tests/crt/unit/` or
-`tests/stdlib/`. This is a source-fix status update: the regressions were not
-re-run by this docs-only pass, and nothing here changes the verdicts or limits
-above.
+`tests/stdlib/`. The regressions were re-run on 2026-11-28 with the prebuilt
+`build-final/c+`; exact commands, exit codes and pass/fail counts, plus the
+results for #220–#222, are in `docs/FINAL_EVIDENCE.md`. In summary: issue214,
+issue215, issue216 and the `issue21` stdlib pattern (#217–#219) pass; the libc
+suite reports 112 passed / 0 failed and the CRT unit suite 103 passed / 0
+failed. The #220 and #222 async regressions (`audio_heap_stability` and
+`async_reentrant_drop`) FAIL to compile under the standard stdlib runner with
+`-Werror` linker-input diagnostics, and the aggregate runner ends 22 passed /
+6 failed. Nothing here changes the verdicts or limits above.
 
 | Issue | Fix now in code |
 | --- | --- |
