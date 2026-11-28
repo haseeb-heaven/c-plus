@@ -38,7 +38,7 @@ struct Options {
   bool sanitizerExplicit = false;
   bool autoRuntime = false;
   bool strict = false;
-  bool fastSafety = false;
+  bool fastSafety = true;
   bool verbose = false;
   // Issue #34: warning-as-error is the default policy; -Werror is accepted but
   // redundant. --legacy-c opts out unless -Werror is explicit.
@@ -80,7 +80,8 @@ void printUsage(raw_ostream &os) {
   os << "  --default        DEFAULT mode: report proven errors, warn if unverified\n";
   os << "  --strict         STRICT mode: reject unverified operations (fail closed)\n";
   os << "  --safety=fast    compile-time + data-stack + UBSan; no side-table lookups\n";
-  os << "  --safety=strict  full checked-heap side-table tracking (default)\n";
+  os << "                   (default)\n";
+  os << "  --safety=strict  opt-in full checked-heap side-table tracking\n";
   os << "  --sanitize=LIST  comma-separated: none|address|undefined|memory|thread|\n";
   os << "                   leak|cfi|integer (Safe mode defaults to undefined)\n";
   os << "  --no-sanitize    plain unsanitized build (alias: --sanitize=none)\n";
@@ -173,6 +174,7 @@ int main(int argc, char **argv) {
     }
     if (a == "--strict") {
       opts.strict = true;
+      opts.fastSafety = false;
       continue;
     }
     if (a == "--default") {

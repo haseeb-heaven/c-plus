@@ -73,7 +73,7 @@ struct DriverOptions {
   bool strict = false;
   // --safety=fast keeps compile-time checks, data-stack handling and UBSan
   // but omits pointer-to-extent side-table lookups in lowered C.
-  bool fastSafety = false;
+  bool fastSafety = true;
   bool verbose = false;
   // Issue #34: every C+ warning is fatal by default. --legacy-c keeps plain-C
   // behaviour unless -Werror is requested explicitly; -w never suppresses C+
