@@ -11252,6 +11252,27 @@ public:
   ShadowInstrumentVisitor(ASTContext &ctx, std::vector<ShadowEdit> &edits)
       : ctx_(ctx), sm_(ctx.getSourceManager()), edits_(edits) {}
 
+  // Every inserted statement spans physical lines that do not exist in the
+  // user's source. Restore the original file/line immediately afterwards so
+  // Clang diagnostics, runtime traps and debuggers keep pointing at the .cp
+  // source instead of the generated temporary C.
+  void push(SourceLocation loc, const std::string &text, bool afterToken) {
+    std::string mapped = text;
+    clang::PresumedLoc ploc = sm_.getPresumedLoc(loc);
+    if (ploc.isValid()) {
+      std::string file = ploc.getFilename();
+      std::string escaped;
+      for (char c : file) {
+        if (c == '\\' || c == '"')
+          escaped += '\\';
+        escaped += c;
+      }
+      mapped += "\n#line " + std::to_string(ploc.getLine()) + " \"" +
+                escaped + "\"\n";
+    }
+    edits_.push_back({loc, mapped, afterToken});
+  }
+
   bool VisitFunctionDecl(FunctionDecl *fd) {
     Stmt *body = fd->doesThisDeclarationHaveABody() ? fd->getBody() : nullptr;
     if (!body || !shadowInMainFile(sm_, body->getBeginLoc()))
@@ -11264,7 +11285,7 @@ public:
       if (p->getType()->isPointerType())
         text += "\n  cplus_shadow_slot_seed(&" + p->getNameAsString() +
                 ", (const void *)(" + p->getNameAsString() + "));";
-    edits_.push_back({body->getBeginLoc(), text, true});
+    push(body->getBeginLoc(), text, true);
     return true;
   }
 
@@ -11281,10 +11302,9 @@ public:
       SourceLocation after = shadowAfterSemicolon(ctx_, ds);
       if (after.isInvalid() || !shadowInMainFile(sm_, after))
         return true;
-      edits_.push_back({after, "\n  cplus_shadow_frame_register(&" + name +
-                                   ", &__cplus_shadow_frame, (const void *)(" +
-                                   name + "), sizeof(" + name + "));",
-                        false});
+      push(after, "\n  cplus_shadow_frame_register(&" + name +
+                      ", &__cplus_shadow_frame, (const void *)(" + name +
+                      "), sizeof(" + name + "));", false);
       return true;
     }
     if (!vd->getType()->isPointerType() || !vd->hasInit())
@@ -11295,7 +11315,7 @@ public:
     SourceLocation after = shadowAfterSemicolon(ctx_, ds);
     if (after.isInvalid() || !shadowInMainFile(sm_, after))
       return true;
-    edits_.push_back({after, "\n  " + seedText(name, vd->getInit()), false});
+    push(after, "\n  " + seedText(name, vd->getInit()), false);
     return true;
   }
 
@@ -11335,7 +11355,7 @@ public:
     if (text.empty())
       text = "cplus_shadow_slot_seed(&" + name + ", (const void *)(" + name +
              "));";
-    edits_.push_back({after, "\n  " + text, false});
+    push(after, "\n  " + text, false);
     return true;
   }
 
@@ -11414,10 +11434,9 @@ private:
     const Stmt *anchor = shadowAnchorStmt(ctx_, s);
     if (!anchor || !shadowInMainFile(sm_, anchor->getBeginLoc()))
       return;
-    edits_.push_back({anchor->getBeginLoc(),
-                      "\n  cplus_shadow_slot_check(&" + slot + ", " + ptrExpr +
-                          ", " + sizeExpr + ", __FILE__, __LINE__);\n  ",
-                      false});
+    push(anchor->getBeginLoc(),
+         "\n  cplus_shadow_slot_check(&" + slot + ", " + ptrExpr + ", " +
+             sizeExpr + ", __FILE__, __LINE__);\n  ", false);
   }
 
   ASTContext &ctx_;
