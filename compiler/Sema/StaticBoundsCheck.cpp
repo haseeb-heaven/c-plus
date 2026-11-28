@@ -6739,6 +6739,13 @@ private:
     if (alloc == "malloc" || alloc == "calloc" || alloc == "cplus_alloc" ||
         alloc == "cplus_zalloc" || alloc == "cplus_new" ||
         alloc == "cplus_new_array") {
+      // An allocation whose size is derived from SIZE_MAX traps before it can
+      // return a block, so there is no live owner to leak on any path.
+      for (size_t t : r)
+        if (isIdent(t, "SIZE_MAX")) {
+          state[name] = FlowFact{};
+          return;
+        }
       FlowFact f;
       f.null = FlowNull::Unknown; // allocation may fail; never assume non-null
       f.own = FlowOwn::Live;
