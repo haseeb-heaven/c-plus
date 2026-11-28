@@ -1412,18 +1412,31 @@ withoutLinkerFlags(const std::vector<std::string> &args) {
   std::vector<std::string> out;
   for (size_t i = 0; i < args.size(); ++i) {
     llvm::StringRef a = args[i];
-    if (a == "-L" || a == "-l") {
+    if (a == "-L" || a == "-l" || a == "-framework" ||
+        a == "-weak_framework" || a == "-isystem" || a == "-include" ||
+        a == "-imacros") {
       if (i + 1 < args.size())
         ++i;
       continue;
     }
+    // Linker inputs passed as plain file paths (static archives, shared
+    // objects and object files) must not reach a -c compile step. Otherwise
+    // a c+ build invocation hands a multi-megabyte archive to Clang as C
+    // source, which parses it for minutes.
+    auto isLinkInput = [](llvm::StringRef s) {
+      return s.ends_with(".a") || s.ends_with(".so") || s.ends_with(".dylib") ||
+             s.ends_with(".lib") || s.ends_with(".o") || s.ends_with(".obj") ||
+             s.ends_with(".tbd");
+    };
     // -fuse-ld=* and -static-lib* are equally link-only: Clang rejects them
     // with -Wunused-command-line-argument on a -c invocation. -pthread and
     // -static are deliberately kept: the former defines _REENTRANT while
     // parsing, and the latter is silently accepted by -c.
     if (a.starts_with("-L") || a.starts_with("-l") ||
         a.starts_with("-Wl,") || a == "-shared" ||
-        a.starts_with("-fuse-ld") || a.starts_with("-static-lib"))
+        a.starts_with("-fuse-ld") || a.starts_with("-static-lib") ||
+        a.starts_with("-framework") || a.starts_with("-weak_framework") ||
+        isLinkInput(a))
       continue;
     out.push_back(args[i]);
   }

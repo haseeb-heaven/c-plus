@@ -326,10 +326,36 @@ int main(int argc, char **argv) {
       opts.extraArgs.emplace_back(value);
       continue;
     }
-    if (a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") {
+    // -framework/-weak_framework take a following token. Both must be link
+    // args, never source inputs: a bare "Cocoa" positional would otherwise be
+    // lowered as C+ source.
+    if (a == "-framework" || a == "-weak_framework") {
       if (i + 1 >= argc) {
         errs() << "error: " << a << " requires a value\n";
         return 1;
+      }
+      opts.extraArgs.emplace_back(a);
+      opts.extraArgs.emplace_back(argv[++i]);
+      continue;
+    }
+    // A bare library/object path is a linker input, not a source file. Without
+    // this, c+ tries to lower a 5 MB .a archive as C+ source and the tokenizer
+    // scans it quadratically for minutes.
+    auto isLinkInputArg = [](const std::string &s) {
+      auto ends = [&](const char *suffix) {
+        size_t n = std::strlen(suffix);
+        return s.size() >= n && s.compare(s.size() - n, n, suffix) == 0;
+      };
+      return ends(".a") || ends(".so") || ends(".dylib") || ends(".lib") ||
+             ends(".o") || ends(".obj") || ends(".tbd");
+    };
+    if (isLinkInputArg(a)) {
+      opts.extraArgs.emplace_back(a);
+      continue;
+    }
+    if (a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") {
+      if (i + 1 >= argc) {
+        errs() << "error: " << a << " requires a value\n";
       }
       std::string value = argv[++i];
       opts.extraArgs.emplace_back(a);

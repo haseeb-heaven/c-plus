@@ -259,6 +259,17 @@ if matches "issue227_strict"; then
   fi
 fi
 
+# --- linker inputs must not be lowered as C+ source ------------------------
+
+if matches "link_input_filter"; then
+  if CPLUS_BIN="$CPLUS" /bin/sh       "$ROOT/tests/compiler/link_input_filter.sh"       >"$OUT/link_input_filter.suite.log" 2>&1; then
+    pass "link_input_filter"
+  else
+    cat "$OUT/link_input_filter.suite.log" >&2
+    fail "link_input_filter" "see tests/out/link_input_filter.suite.log"
+  fi
+fi
+
 echo
 gap_word=gaps
 [ "$GAP" -eq 1 ] && gap_word=gap
