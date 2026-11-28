@@ -25,6 +25,7 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
+#include "stdlib/view_lifetime.hp"
 
 /* the inspiration language-inspired: a data stack is a large reserved address region with a
  * single bump pointer.  `backing` selects virtual memory (mmap/VirtualAlloc,
@@ -75,6 +76,18 @@ static inline void stdlib_datastack_poison(unsigned char *a, unsigned char *b) {
 #else
     (void)a; (void)b;
 #endif
+}
+
+/* Core-memory audit C2: a rewind hands the same addresses back out.  Retire
+ * every view published inside the rewound half-open range before the bump
+ * pointer moves, matching the arena reset pattern.  Retiring only these bytes
+ * (not the whole backing region) keeps views from enclosing, still-live
+ * scopes valid.  The registry stores addresses for identity only and never
+ * dereferences them, so this is safe over poisoned/uncommitted bytes too. */
+static inline void stdlib_datastack_retire_rewound(const unsigned char *lo,
+                                                   const unsigned char *hi) {
+    if (lo == (const unsigned char *)0 || hi <= lo) return;
+    stdlib_view_retire_range((const void *)lo, (size_t)(hi - lo));
 }
 
 typedef struct stdlib_datastack {
@@ -256,6 +269,7 @@ static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds) {
 static inline void stdlib_scratch_leave(stdlib_datastack *ds,
                                         stdlib_scratch_mark m) {
     if (ds == 0 || m.generation != ds->generation) return; /* stale/NULL: refuse */
+    stdlib_datastack_retire_rewound(m.saved_top, ds->top);
     stdlib_datastack_poison(m.saved_top, ds->top);
     ds->top = m.saved_top;
     /* Do NOT bump generation here: nested scopes must remain valid.  The
@@ -384,7 +398,10 @@ static inline void stdlib_scratch_op_release(void *ctx, void *ptr, size_t size) 
 static inline void stdlib_scratch_op_reset(void *ctx) {
     error e = error(); (void)ctx;
     stdlib_datastack *ds = stdlib_thread_datastack(&e);
-    if (ds != 0) ds->top = ds->base;
+    if (ds != 0) {
+        stdlib_datastack_retire_rewound(ds->base, ds->top);
+        ds->top = ds->base;
+    }
 }
 /* C+ RAII scope guard: entering saves the top, drop() restores it in one
  * store (scoped-memory-style single-store scope free).  Nested scopes are safe. */
@@ -407,7 +424,9 @@ class stdlib_scratch_scope {
 
     void drop(void) {
         if (this->scope_ds != (stdlib_datastack *)0 && this->scope_gen == (*this->scope_ds).generation) {
-            stdlib_datastack_poison(this->scope_saved_top, (*this->scope_ds).top);
+            unsigned char *top = (*this->scope_ds).top;
+            stdlib_datastack_retire_rewound(this->scope_saved_top, top);
+            stdlib_datastack_poison(this->scope_saved_top, top);
             (*this->scope_ds).top = this->scope_saved_top;
         }
         this->scope_ds = (stdlib_datastack *)0;

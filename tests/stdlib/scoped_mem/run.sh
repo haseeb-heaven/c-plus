@@ -63,5 +63,25 @@ if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/test_align.cp" --default --no-
     pass=$((pass + 1));
 else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL 16-byte alignment"; tail -8 "$D/build_align.log"; cat "$D/align.out" 2>/dev/null; fi
 
+# Core-memory audit C2: a stale scratch-backed view must be retired at scope
+# exit and must not invalidate a fresh owner's token at the reused address.
+cases=$((cases + 1))
+if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/scratch_view_owner.cp" --default --no-werror --sanitize=none \
+      -I. -o "$D/scratch_view_owner" -- build/libc/libcplus_hardened.a >"$D/build_view_owner.log" 2>&1 \
+      && timeout 30 "$D/scratch_view_owner" >"$D/view_owner.out" 2>"$D/view_owner.err" \
+      && grep -qF 'SCRATCH_VIEW 0' "$D/view_owner.out" && [ ! -s "$D/view_owner.err" ]; then
+    pass=$((pass + 1));
+else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL scratch view owner"; tail -8 "$D/build_view_owner.log"; cat "$D/view_owner.out" 2>/dev/null; fi
+
+# Same C2 cross-object proof in a release build (NDEBUG): view retirement is
+# unconditional; only the debug poison store is compiled out.
+cases=$((cases + 1))
+if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/scratch_view_owner.cp" --default --no-werror --sanitize=none \
+      -DNDEBUG -I. -o "$D/scratch_view_owner_release" -- build/libc/libcplus_hardened.a >"$D/build_view_owner_release.log" 2>&1 \
+      && timeout 30 "$D/scratch_view_owner_release" >"$D/view_owner_release.out" 2>"$D/view_owner_release.err" \
+      && grep -qF 'SCRATCH_VIEW 0' "$D/view_owner_release.out" && [ ! -s "$D/view_owner_release.err" ]; then
+    pass=$((pass + 1));
+else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL scratch view owner release"; tail -8 "$D/build_view_owner_release.log"; cat "$D/view_owner_release.out" 2>/dev/null; fi
+
 echo "SCOPED_MEM_TEST $cases $pass $fail"
 [ "$fail" -eq 0 ]
