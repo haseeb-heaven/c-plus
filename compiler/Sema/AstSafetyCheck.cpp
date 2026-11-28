@@ -11267,8 +11267,11 @@ public:
           escaped += '\\';
         escaped += c;
       }
-      mapped += "\n#line " + std::to_string(ploc.getLine()) + " \"" +
-                escaped + "\"\n";
+      const std::string directive = "\n#line " +
+          std::to_string(ploc.getLine()) + " \"" + escaped + "\"\n";
+      // Precede AND follow the injected block: the directive before it is
+      // what makes an error in the generated statement point at the source.
+      mapped = directive + mapped + "\n" + directive;
     }
     edits_.push_back({loc, mapped, afterToken});
   }

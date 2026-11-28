@@ -1726,11 +1726,19 @@ private:
     atStmtStart_ = false;
   }
 
+  std::string sourceLine(unsigned line) const {
+    // The leading newline keeps the directive valid even when the edit lands
+    // in the middle of a physical source line (e.g. before a closing brace).
+    return "\n#line " + std::to_string(line) + " \"" +
+           quoteFile(filename_) + "\"\n";
+  }
+
   void insertBefore(const Token &t, const std::string &drops) {
-    std::string text = drops;
-    text += "\n#line " + std::to_string(t.line) + " \"" +
-            quoteFile(filename_) + "\"\n";
-    edits_.push_back(Edit{t.offset, 0, text, seq_++});
+    // Map the injected destructor calls to the user's source line, then
+    // restore it before the next original token.
+    edits_.push_back(Edit{t.offset, 0,
+                          sourceLine(t.line) + drops + "\n" +
+                              sourceLine(t.line), seq_++});
   }
 
   /// Wrap `return`/`break`/`continue` in a compound statement so that
@@ -1767,11 +1775,12 @@ private:
       before = "{ __auto_type __cplus_ret = (";
       middle = "); " + drops + "return __cplus_ret";
     }
+    const unsigned line = toks_[keywordIdx].line;
     edits_.push_back(
-        Edit{keywordOffset, keywordLength, before, seq_++});
+        Edit{keywordOffset, keywordLength, sourceLine(line) + before, seq_++});
     edits_.push_back(Edit{toks_[semi].offset, 0, middle, seq_++});
-    edits_.push_back(
-        Edit{toks_[semi].offset + toks_[semi].text.size(), 0, " }", seq_++});
+    edits_.push_back(Edit{toks_[semi].offset + toks_[semi].text.size(), 0,
+                          " }\n" + sourceLine(line), seq_++});
   }
 
   void insertStatementCleanup(size_t keywordIdx, const std::string &drops) {
@@ -1781,10 +1790,11 @@ private:
                 toks_[keywordIdx]);
       return;
     }
-    edits_.push_back(
-        Edit{toks_[keywordIdx].offset, 0, "{ " + drops, seq_++});
-    edits_.push_back(
-        Edit{toks_[semi].offset + toks_[semi].text.size(), 0, " }", seq_++});
+    const unsigned line = toks_[keywordIdx].line;
+    edits_.push_back(Edit{toks_[keywordIdx].offset, 0,
+                          sourceLine(line) + "{ " + drops, seq_++});
+    edits_.push_back(Edit{toks_[semi].offset + toks_[semi].text.size(), 0,
+                          " }\n" + sourceLine(line), seq_++});
   }
 
   /// The innermost live binding named `name`, or an invalid DeclId.  The
