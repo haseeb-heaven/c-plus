@@ -28,6 +28,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <wchar.h>
+
+/* Invalid conversion bases (1 or outside 2..36) are platform-defined:
+ * glibc leaves endptr NULL, the C+ hardened wrappers define endptr==nptr.
+ * Do not compare an unspecified host value against the hardened contract. */
+#define INVALID_CONV_BASE(b_) ((b_) < 0 || (b_) == 1 || (b_) > 36)
 #include <wctype.h>
 
 /* ------------------------------------------------------------------ state */
@@ -77,7 +82,7 @@ static int di_l(const char *s, int base) {
     errno = 0; cv = cplus_strtol(s, &ce, base); cerr = errno;
     errno = 0; hv = strtol(s, &he, base);       herr = errno;
     if (cv != hv) FINDING("strtol(base=%d): value %ld vs host %ld", base, cv, hv);
-    if (ce != he) FINDING("strtol(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("strtol(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("strtol(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -99,7 +104,7 @@ static int di_ul(const char *s, int base) {
     errno = 0; cv = cplus_strtoul(s, &ce, base); cerr = errno;
     errno = 0; hv = strtoul(s, &he, base);       herr = errno;
     if (cv != hv) FINDING("strtoul(base=%d): value %lu vs host %lu", base, cv, hv);
-    if (ce != he) FINDING("strtoul(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("strtoul(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("strtoul(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -114,7 +119,7 @@ static int di_ll(const char *s, int base) {
     errno = 0; hv = strtoll(s, &he, base);       herr = errno;
     if (cv != hv)
         FINDING("strtoll(base=%d): value %lld vs host %lld", base, cv, hv);
-    if (ce != he) FINDING("strtoll(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("strtoll(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("strtoll(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -129,7 +134,7 @@ static int di_ull(const char *s, int base) {
     errno = 0; hv = strtoull(s, &he, base);       herr = errno;
     if (cv != hv)
         FINDING("strtoull(base=%d): value %llu vs host %llu", base, cv, hv);
-    if (ce != he) FINDING("strtoull(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("strtoull(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("strtoull(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -221,7 +226,7 @@ static int di_imax(const char *s, int base) {
     if (cv != hv)
         FINDING("strtoimax(base=%d): %lld vs host %lld", base,
                 (long long)cv, (long long)hv);
-    if (ce != he) FINDING("strtoimax(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("strtoimax(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("strtoimax(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -237,7 +242,7 @@ static int di_umax(const char *s, int base) {
     if (cv != hv)
         FINDING("strtoumax(base=%d): %llu vs host %llu", base,
                 (unsigned long long)cv, (unsigned long long)hv);
-    if (ce != he) FINDING("strtoumax(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("strtoumax(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("strtoumax(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -253,7 +258,7 @@ static int di_wimax(const wchar_t *s, int base) {
     if (cv != hv)
         FINDING("wcstoimax(base=%d): %lld vs host %lld", base,
                 (long long)cv, (long long)hv);
-    if (ce != he) FINDING("wcstoimax(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("wcstoimax(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("wcstoimax(base=%d): errno %d vs host %d", base, cerr, herr);
@@ -269,7 +274,7 @@ static int di_wumax(const wchar_t *s, int base) {
     if (cv != hv)
         FINDING("wcstoumax(base=%d): %llu vs host %llu", base,
                 (unsigned long long)cv, (unsigned long long)hv);
-    if (ce != he) FINDING("wcstoumax(base=%d): endptr %td vs host %td", base,
+    if (!INVALID_CONV_BASE(base) && ce != he) FINDING("wcstoumax(base=%d): endptr %td vs host %td", base,
                           ce ? ce - s : (ptrdiff_t)-1,
                           he ? he - s : (ptrdiff_t)-1);
     if (cerr != herr) FINDING("wcstoumax(base=%d): errno %d vs host %d", base, cerr, herr);
