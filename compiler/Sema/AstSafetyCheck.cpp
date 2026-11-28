@@ -6966,12 +6966,17 @@ public:
         auto fit = userFrees_.find(target);
         if (fit != userFrees_.end())
           for (int slot : fit->second) {
+            // Summaries are keyed by callee name. A cast or variadic call can
+            // supply fewer arguments than the slot recorded for that callee,
+            // so never index past this call site's argument list.
+            if (slot < 0 || (unsigned)slot >= call->getNumArgs())
+              continue;
             int ps = paramIndexOf(call->getArg((unsigned)slot));
             if (ps >= 0)
               addFrees.insert(ps);
           }
         for (const auto &pr : derefParams_)
-          if (pr.first == target) {
+          if (pr.first == target && pr.second < call->getNumArgs()) {
             int ps = paramIndexOf(call->getArg(pr.second));
             if (ps >= 0)
               addDerefs.insert({currentFunction_, (unsigned)ps});
