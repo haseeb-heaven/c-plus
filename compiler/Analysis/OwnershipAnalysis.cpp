@@ -1,9 +1,10 @@
 #include "Analysis/OwnershipAnalysis.h"
 
+#include <functional>
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/Type.h>
 #include <clang/Analysis/CFG.h>
 // Reuse Clang's upstream uninitialized-value dataflow analysis instead of a
 // C+-specific reimplementation.  Licensed Apache-2.0 WITH LLVM-exception;
@@ -219,83 +220,83 @@ static void addIndex(std::vector<int> &indices, int idx) {
 /// call must stay accepted while an unannotated user extern must not.
 static bool isBuiltinLibcEffectName(llvm::StringRef name) {
   static const std::set<llvm::StringRef> kBuiltins = {
-      "malloc",    "calloc",    "malloc_s",  "calloc_s",   "realloc",
-      "realloc_s", "free",      "cplus_release", "free_s", "memcpy",
-      "memmove",   "memcpy_s",  "memmove_s", "memset",     "memset_s",
-      "strcpy",    "strcpy_s",  "strncpy",   "strncpy_s",  "strcat",
-      "strcat_s",  "strncat",   "strncat_s", "strlen",     "strnlen_s",
-      "strcmp",    "fopen",     "fopen_s",   "fclose",     "fclose_s",
-      "fread",     "fread_s",   "fwrite",    "fwrite_s",   "snprintf",
-      "sprintf_s", "snprintf_s", "scanf_s",
-      // Return-value-owning checked adapters: unlike Annex K fopen_s these
-      // return FILE *, so they must keep fopen's ownership summary.
-      "cplus_fopen_s", "cplus_fclose_s", "cplus_fread_s", "cplus_fwrite_s"};
+      "malloc",     "calloc",     "malloc_s",  "calloc_s",   "realloc",
+      "realloc_s",  "free",       "cplus_release", "free_s", "memcpy",
+      "memmove",    "memset",     "memcpy_s",  "memmove_s",  "memset_s",
+      "strcpy",     "strcpy_s",   "strncpy",   "strncpy_s",  "strcat",
+      "strcat_s",   "strncat",    "strncat_s", "strlen",     "strnlen_s",
+      "strcmp",     "fopen",      "fopen_s",   "fclose",     "fclose_s",
+      "fread",      "fread_s",    "fwrite",    "fwrite_s",   "snprintf",
+      "sprintf_s",  "snprintf_s", "scanf_s"};
   return kBuiltins.count(name) != 0;
 }
 
 /// Compiler/runtime entry points are emitted by the rewriter, have known
 /// semantics and are linked from the C+ runtime; they are trusted regardless of
-/// where the contract file came from. This is a CLOSED allowlist: matching
-/// arbitrary `cplus_*` / `__cplus_*` prefixes let any user FFI declaration
-/// bypass the STRICT unverified-extern gate. isReservedHelperName() already
-/// enumerates the generated and runtime-owned symbols (while deliberately
-/// leaving user helpers such as `cplus_core_helper` alone); the small extra
-/// set below covers genuine runtime entry points emitted into the rewriter
-/// prelude that are not in that list. Shared by hasDeclaredEffect() and the
+/// where the contract file came from. Shared by hasDeclaredEffect() and the
 /// authoritative-summary predicate so the two cannot drift apart.
+///
+/// This MUST be a closed allowlist: a wildcard `cplus_*` / `__cplus_*` prefix
+/// would let any user header declare `extern int *cplus_backdoor(int *)` and
+/// silence the STRICT unverified-extern gate without a body or a contract.
+/// isReservedHelperName() is that closed list (explicit symbols plus a few
+/// closed runtime families); the extra exact names below are genuine runtime
+/// ABI entry points declared by runtime/include/cplus/cplus.h that are not
+/// otherwise reserved. A user helper such as `cplus_core_helper` stays
+/// untrusted and must supply a body or a validated contract like any other
+/// user function.
 static bool isCompilerHelperEffectName(llvm::StringRef name) {
   if (isReservedHelperName(name))
     return true;
-  static const std::set<llvm::StringRef> kEmitted = {
-      "__cplus_auto_runtime_init", "cplus_set_auto_runtime", "cplus_epoch"};
-  return kEmitted.count(name) != 0;
-}
-
-/// True when `t` can carry pointers a bodiless callee could exercise without a
-/// contract: a pointer (including function/member pointers), an array of such,
-/// or a by-value record whose fields contain one. Canonicalisation strips
-/// typedefs; `visited` keeps recursive record graphs finite. An opaque record
-/// has no fields to inspect (and cannot be passed by value at a real call
-/// site); unprototyped declarations are rejected separately below.
-static bool typeHasPointerEffect(QualType t,
-                                 std::set<const TagDecl *> &visited) {
-  if (t.isNull())
-    return false;
-  t = t.getCanonicalType();
-  if (t->isPointerType() || t->isFunctionPointerType() ||
-      t->isMemberPointerType())
-    return true;
-  if (const auto *at = t->getAsArrayTypeUnsafe())
-    return typeHasPointerEffect(at->getElementType(), visited);
-  const auto *rt = t->getAs<RecordType>();
-  if (!rt)
-    return false;
-  const RecordDecl *rd = rt->getDecl();
-  if (!rd || !visited.insert(rd->getCanonicalDecl()).second)
-    return false;
-  const RecordDecl *def = rd->getDefinition();
-  return def && std::any_of(def->field_begin(), def->field_end(),
-                            [&visited](const FieldDecl *field) {
-                              return typeHasPointerEffect(field->getType(),
-                                                          visited);
-                            });
+  static const std::set<llvm::StringRef> kRuntimeAbi = {
+      "cplus_epoch",         "cplus_live_table_stats",
+      "cplus_scan_value_at", "cplus_exception_enter",
+      "cplus_exception_pop", "cplus_exception_raise"};
+  return kRuntimeAbi.count(name) != 0;
 }
 
 /// True when a function declaration can carry safety-relevant pointer effects.
-/// Any pointer parameter/return -- including pointers nested in a by-value
-/// struct or union -- makes the callee's behaviour unverifiable without a body
-/// or a declared contract. A variadic tail is untyped and an unprototyped (K&R)
-/// declaration states no parameter types at all, so neither can be certified
-/// pointer-free from the declaration alone. Scalar-only externs (e.g.
-/// `int ext_add(int,int)`) are pure by construction and must stay accepted.
+/// Any pointer parameter (including a callback/function pointer) or a pointer
+/// return makes the callee's behaviour unverifiable without a body or a
+/// declared contract; scalar-only externs (e.g. `int ext_add(int,int)`) are
+/// pure by construction and must stay accepted in STRICT.
 static bool hasPointerEffectSignature(const clang::FunctionDecl *fd) {
-  if (fd->isVariadic() || !fd->hasPrototype())
+  // Aggregates can carry pointers too; a record with any pointer field is as
+  // unverifiable as a direct pointer parameter. Limit recursion to one level
+  // of nested records (with a visited set) so recursive types terminate.
+  std::set<const clang::RecordType *> seen;
+  std::function<bool(clang::QualType, unsigned)> carriesPointer =
+      [&](clang::QualType t, unsigned depth) -> bool {
+    if (t.isNull())
+      return false;
+    if (t->isPointerType() || t->isFunctionPointerType() ||
+        t->isMemberPointerType())
+      return true;
+    if (depth > 2)
+      return false;
+    const clang::Type *ty = t->getUnqualifiedDesugaredType();
+    if (const auto *rt = dyn_cast_or_null<clang::RecordType>(ty)) {
+      if (!seen.insert(rt).second)
+        return false;
+      const clang::RecordDecl *rd = rt->getDecl();
+      if (!rd)
+        return false;
+      if (const clang::RecordDecl *def = rd->getDefinition())
+        rd = def;
+      for (const clang::FieldDecl *fld : rd->fields())
+        if (carriesPointer(fld->getType(), depth + 1))
+          return true;
+    }
+    return false;
+  };
+  // Variadic and unprototyped (K&R) functions may receive arbitrary pointer
+  // arguments without a declared contract; they must stay unverified.
+  if (fd->isVariadic() || !fd->hasWrittenPrototype())
     return true;
-  std::set<const TagDecl *> visited;
-  if (typeHasPointerEffect(fd->getReturnType(), visited))
+  if (carriesPointer(fd->getReturnType(), 0))
     return true;
-  for (const ParmVarDecl *p : fd->parameters())
-    if (typeHasPointerEffect(p->getType(), visited))
+  for (const clang::ParmVarDecl *p : fd->parameters())
+    if (carriesPointer(p->getType(), 0))
       return true;
   return false;
 }
@@ -322,33 +323,42 @@ class LocalCollector : public RecursiveASTVisitor<LocalCollector> {
 public:
   explicit LocalCollector(ASTContext &ctx) : ctx_(ctx) {}
 
-  // Only these functions are known to write through an output pointer. Taking
-  // an address for an arbitrary call (or storing it) does NOT initialize it.
+  // Only these EXACT functions are known to write through an output pointer.
+  // A substring match such as `find("scan")` would let `prescan(&x)` or a
+  // read-only `read_only_scan(const int *)` silently suppress an uninitialized
+  // read. Taking an address for an arbitrary call (or storing it) does NOT
+  // initialize it.
   static bool isOutputFunction(llvm::StringRef name) {
-    return name.contains("scanf") || name == "getline" ||
-           name == "pthread_mutex_init" || name == "pthread_cond_init" ||
-           name == "pthread_create" || name == "scan" ||
-           name == "cplus_scan_one" || name == "cplus_scan_value" ||
-           name == "cplus_scan_value_at" || name == "checked_add" ||
-           name == "cplus_checked_add";
+    static const std::set<llvm::StringRef> kOutputs = {
+        "scanf",         "scanf_s",       "__isoc99_scanf",
+        "sscanf",        "sscanf_s",      "fscanf",
+        "fscanf_s",      "vscanf",        "vsscanf",
+        "vfscanf",       "getline",       "pthread_mutex_init",
+        "pthread_cond_init", "pthread_create", "scan",
+        "cplus_scan_one", "cplus_scan_value", "cplus_scan_value_at",
+        "checked_add",   "cplus_checked_add"};
+    return kOutputs.count(name) != 0;
   }
 
   bool VisitCallExpr(CallExpr *call) {
     const FunctionDecl *callee = call->getDirectCallee();
     llvm::StringRef calleeName = callee ? callee->getName() : llvm::StringRef();
-    if (calleeName.empty())
+    if (!callee)
       if (const auto *ref = dyn_cast<DeclRefExpr>(
               call->getCallee()->IgnoreParenImpCasts()))
         calleeName = ref->getDecl()->getName();
-    // Never infer output behaviour from a substring such as "scan": a
-    // read-only `read_only_scan(const int *)` is not an output function. Only
-    // the exact whitelist above initialises an address argument. An opaque
-    // callee (unexpanded macro or function pointer) is treated as a possible
-    // writer ONLY for pointers whose pointee is not const, and NEVER for a
-    // by-value scalar argument.
-    const bool knownOutput = isOutputFunction(calleeName);
-    const bool byValueOutput = calleeName == "cplus_scan_one" ||
-                               calleeName == "cplus_scan_value";
+    // Only a truly unresolved callee name (e.g. a macro-expanded call whose
+    // callee cannot be named) is conservatively treated as an unknown output.
+    // An indirect call through a function pointer is NOT: its signature says
+    // whether a parameter is a const (read-only) pointer, and a body we cannot
+    // see cannot be assumed to initialize `&x`. The policy worklist below
+    // diagnoses the escape instead of seeding it as initialized.
+    bool unknownMacroCall = calleeName.empty() && !callee;
+    const bool isOutput = isOutputFunction(calleeName) || unknownMacroCall;
+    // By-value scalars are initialised only by the exact C+ scan helpers.
+    // An opaque/indirect call must never make `int x; fn(x); return x;` clean.
+    bool byValueOutput = calleeName == "cplus_scan_one" ||
+                         calleeName == "cplus_scan_value";
     for (const Expr *arg : call->arguments()) {
       const Expr *a = arg->IgnoreParenCasts();
       const auto *uo = dyn_cast<UnaryOperator>(a);
@@ -356,16 +366,11 @@ public:
         a = uo->getSubExpr()->IgnoreParenImpCasts();
         if (const auto *ref = dyn_cast<DeclRefExpr>(a))
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
-            // C+ policy: only the exact whitelist, or an opaque callee that
-            // can legally write through a non-const pointer argument,
-            // initialises a variable through `&v`. Everything else is
-            // recorded separately so Clang's address-taken suppression can be
+            // C+ policy: only a whitelist of output functions initialises a
+            // variable through `&v`. An opaque callee does not. Record the
+            // latter separately so Clang's address-taken suppression can be
             // compensated for without seeding the whitelist as initialised.
-            const QualType argType = arg->getType();
-            const bool opaqueWritable =
-                !callee && argType->isPointerType() &&
-                !argType->getPointeeType().isConstQualified();
-            if (knownOutput || opaqueWritable)
+            if (isOutput)
               addrTaken_.insert(vd);
             else
               nonOutputAddrTaken_.insert(vd);
@@ -634,16 +639,6 @@ public:
 
 private:
   void checkRead(const Stmt *s, const Expr *e) {
-    // System headers are trusted input. Apple's math.h defines unions whose
-    // alternate members are deliberately never initialized; treating those
-    // as definite-initialization violations rejects valid unchanged C.
-    if (s) {
-      SourceLocation loc = s->getBeginLoc();
-      if (loc.isMacroID())
-        loc = ctx_.getSourceManager().getExpansionLoc(loc);
-      if (loc.isValid() && ctx_.getSourceManager().isInSystemHeader(loc))
-        return;
-    }
     SubKey k;
     if (!subKeyOf(ctx_, e, k) || !tracked_.count(k.base))
       return;
@@ -1625,11 +1620,11 @@ static ContractState &loadedContracts() {
   return st;
 }
 
-FunctionEffect libcEffect(llvm::StringRef name) {
-  auto &contracts = loadedContracts().contracts;
-  auto it = contracts.find(name.str());
-  if (it != contracts.end())
-    return it->second;
+/// Built-in effect summaries for libc / SafeCRT calls. Kept separate from the
+/// JSON contract layer so a known-correct argument index can be applied even
+/// when a contract entry exists (the compiled-in contracts use prose extents
+/// such as "n <= dst_capacity" that resolve to no argument index at all).
+static FunctionEffect builtinLibcEffect(llvm::StringRef name) {
   FunctionEffect e;
   if (name == "malloc" || name == "calloc" || name == "malloc_s" ||
       name == "calloc_s") {
@@ -1651,16 +1646,16 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.freedArg = 0;
     e.nullableArg = true; // free(NULL) is defined
     e.category = "CPLUS-SAFE-FREE";
-  } else if (name == "memcpy" || name == "memmove" || name == "memcpy_s" ||
-             name == "memmove_s" || name == "memset" || name == "memset_s") {
+  } else if (name == "memcpy" || name == "memmove" || name == "memset" ||
+             name == "memcpy_s" || name == "memmove_s" || name == "memset_s") {
     e.borrows = true;
     e.writes = true;
     e.destArg = 0;
-    // memcpy(dst,src,n)/memset(dst,c,n): n is argument 2. The _s variants
-    // take the destination capacity (dmax) as argument 1.
+    // memcpy/memmove/memset: (dst, src, n) => n is argument 2.
+    // *_s variants: (dst, dmax, ...) => destination capacity is argument 1.
     e.sizeArg = (name == "memcpy_s" || name == "memmove_s" ||
                  name == "memset_s") ? 1 : 2;
-    e.checkedSize = e.sizeArg >= 0;
+    e.checkedSize = true;
     e.category = "CPLUS-SAFE-BOUNDS";
   } else if (name == "strcpy" || name == "strcpy_s" ||
              name == "strncpy" || name == "strncpy_s" ||
@@ -1669,36 +1664,43 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.borrows = true;
     e.writes = true;
     e.destArg = 0;
-    // strncpy(dst,src,n)/strncat(dst,src,n): n is argument 2, NOT the source
-    // pointer at argument 1. Annex K *_s takes dmax at argument 1.
-    e.sizeArg = (name == "strncpy" || name == "strncat") ? 2
-                : (name.find("_s") != std::string::npos ? 1 : -1);
+    // strncpy/strncat: (dst, src, n) => n is argument 2, NOT the src pointer
+    // at argument 1. The SafeCRT *_s forms put dmax at argument 1.
+    if (name == "strcpy_s" || name == "strncpy_s" || name == "strcat_s" ||
+        name == "strncat_s")
+      e.sizeArg = 1;
+    else if (name == "strncpy" || name == "strncat")
+      e.sizeArg = 2;
     e.checkedSize = e.sizeArg >= 0;
     e.category = "CPLUS-SAFE-CRT";
   } else if (name == "strlen" || name == "strnlen_s" || name == "strcmp") {
     e.borrows = true;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fopen" || name == "cplus_fopen_s") {
-    // cplus_fopen_s(name, mode) is type-for-type identical to fopen and
-    // returns the owned FILE *. Annex K fopen_s(&fp, name, mode) instead
-    // returns errno_t, so it must NOT carry a return-value ownership claim.
+  } else if (name == "fopen") {
     e.allocates = true;
-    e.returnsOwned = true;
+    e.returnsOwned = true; // fopen returns the owned FILE*
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
   } else if (name == "fopen_s") {
-    e.writes = true; // writes the FILE ** out-param at argument 0
+    e.allocates = true;
+    // fopen_s returns errno_t and writes the owned FILE* through argument 0.
+    e.returnsOwned = false;
+    e.writes = true;
     e.destArg = 0;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fclose" || name == "cplus_fclose_s") {
+  } else if (name == "fclose" || name == "fclose_s") {
     e.frees = true;
     e.freedArg = 0;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fread" || name == "fwrite" || name == "cplus_fread_s" ||
-             name == "cplus_fwrite_s") {
+  } else if (name == "fread" || name == "fread_s" || name == "fwrite" ||
+             name == "fwrite_s") {
     e.borrows = true;
     e.writes = true;
+    // fread_s/fwrite_s: (buffer, buffersize, elementsize, count, stream).
+    e.destArg = 0;
+    e.sizeArg = (name == "fread_s" || name == "fwrite_s") ? 1 : -1;
+    e.checkedSize = e.sizeArg >= 0;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
   } else if (name == "snprintf" || name == "sprintf_s" ||
@@ -1707,6 +1709,32 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.checkedSize = name.starts_with("sn") || name.find("_s") != std::string::npos;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
+  }
+  return e;
+}
+
+FunctionEffect libcEffect(llvm::StringRef name) {
+  FunctionEffect builtin = builtinLibcEffect(name);
+  auto &contracts = loadedContracts().contracts;
+  auto it = contracts.find(name.str());
+  if (it == contracts.end())
+    return builtin;
+  FunctionEffect e = it->second;
+  // Prefer the exact builtin argument indices over a contract's prose extent:
+  // without this, `strncpy`'s size would be read from the source pointer at
+  // argument 1 instead of the byte count at argument 2.
+  if (builtin.sizeArg >= 0) {
+    e.sizeArg = builtin.sizeArg;
+    e.checkedSize = true;
+  }
+  if (builtin.destArg >= 0)
+    e.destArg = builtin.destArg;
+  if (name == "fopen_s") {
+    // errno_t fopen_s(FILE **streamptr, ...): ownership is delivered through
+    // argument 0, not through the scalar return value.
+    e.returnsOwned = false;
+    e.writes = true;
+    e.destArg = 0;
   }
   return e;
 }
@@ -1922,77 +1950,42 @@ std::set<std::string> definedFunctionNames(const std::string &source,
 /// rejecting every `cplus_*` name would outlaw legitimate project helpers such
 /// as `cplus_core_helper` (a multi-TU regression fixture).
 bool isReservedHelperName(llvm::StringRef name) {
-  // Emitted guard/arithmetic helpers and generated defer/drop helpers.
-  if (name.starts_with("__cplus_checked_") ||
-      name.starts_with("__cplus_inline_") ||
-      name.starts_with("__cplus_throw_") ||
-      name.starts_with("__cplus_defer_") || name.starts_with("cplus_drop_"))
-    return true;
-  // Closed runtime families (allocation, checks, printing, threading, scope,
-  // exceptions, scanning).
-  if (name.starts_with("cplus_alloc") || name.starts_with("cplus_check_") ||
-      name.starts_with("cplus_print_") || name.starts_with("cplus_mutex_") ||
-      name.starts_with("cplus_tls_") || name.starts_with("cplus_scope_") ||
-      name.starts_with("cplus_exception_") || name.starts_with("cplus_exc_") ||
-      name.starts_with("cplus_scan_") || name.starts_with("cplus_checked"))
-    return true;
-  // Remaining individual runtime ABI entry points (runtime/include/cplus/cplus.h
-  // and the rewriter's generated wrappers).
+  // Closed exact-symbol allowlist. Prefix matching used to let any user
+  // declaration like `extern void *cplus_check_backdoor(void *)` bypass the
+  // STRICT unverified-extern gate (issue #199). Every entry below is an
+  // actual compiler-generated helper or runtime ABI symbol.
   static const std::set<llvm::StringRef> kReserved = {
       "__cplus_bounds_check",
-      "cplus_address_retired", "cplus_allocation_generation",
-      "cplus_arith_fatal", "cplus_cleanup", "cplus_cleanup_kind",
+      "__cplus_checked_add_i64", "__cplus_checked_div_i64",
+      "__cplus_checked_f2i_i64", "__cplus_checked_mul_i64",
+      "__cplus_checked_narrow_i64", "__cplus_checked_rem_i64",
+      "__cplus_checked_shl_i64", "__cplus_checked_shr_i64",
+      "__cplus_checked_size_mul", "__cplus_checked_sub_i64",
+      "__cplus_inline_f2i_i64", "__cplus_inline_narrow_i64",
+      "__cplus_inline_size_mul", "__cplus_inline_sub_i64",
+      "cplus_address_retired", "cplus_alloc", "cplus_alloc_array",
+      "cplus_alloc_bytes", "cplus_alloc_count", "cplus_allocation_generation",
+      "cplus_arith_fatal", "cplus_check_bounds", "cplus_check_index",
+      "cplus_check_live", "cplus_check_nonnull", "cplus_check_ptr_formation",
+      "cplus_cleanup", "cplus_cleanup_kind", "cplus_epoch",
+      "cplus_exception_enter", "cplus_exception_pop", "cplus_exception_raise",
       "cplus_fatal", "cplus_fatal_hook", "cplus_free_registered",
-      "cplus_log", "cplus_log_impl", "cplus_memcpy", "cplus_memmove",
-      "cplus_move", "cplus_new", "cplus_new_array",
-      "cplus_printf_s", "cplus_fprintf_s", "cplus_snprintf_s",
-      "cplus_sprintf_s", "cplus_realloc", "cplus_realloc_registered",
-      "cplus_register_allocation", "cplus_release",
+      "cplus_live_table_stats", "cplus_log", "cplus_log_impl",
+      "cplus_memcpy", "cplus_memmove", "cplus_move", "cplus_mutex_free",
+      "cplus_mutex_lock", "cplus_mutex_new", "cplus_mutex_unlock",
+      "cplus_new", "cplus_new_array", "cplus_printf_s", "cplus_fprintf_s",
+      "cplus_snprintf_s", "cplus_sprintf_s", "cplus_print_begin",
+      "cplus_print_end", "cplus_print_value", "cplus_realloc",
+      "cplus_realloc_registered", "cplus_register_allocation", "cplus_release",
       "cplus_resource", "cplus_resource_check_borrow",
-      "cplus_retired_ledger_full", "cplus_rethrow_exc",
-      "cplus_rotl32", "cplus_rotr32",
+      "cplus_retired_ledger_full", "cplus_rotl32", "cplus_rotr32",
       "cplus_runtime", "cplus_runtime_log_level",
       "cplus_runtime_logging_init", "cplus_scan_one", "cplus_scan_value",
-      "cplus_scan_value_at",
-      "cplus_strcpy", "cplus_strnlen", "cplus_zero", "cplus_zalloc",
-  };
+      "cplus_scan_value_at", "cplus_scope_cleanup", "cplus_scope_push",
+      "cplus_strcpy", "cplus_strnlen", "cplus_tls_free", "cplus_tls_get",
+      "cplus_tls_new", "cplus_tls_set", "cplus_zero", "cplus_zalloc"};
   return kReserved.count(name) != 0;
 }
-
-  /// True for declarations coming from a real system header or from this
-  /// compiler's own runtime include tree (which may be added with -I rather
-  /// than -isystem). Both are trusted; user headers are not.
-  static bool isCompilerRuntimeLocation(clang::SourceManager &sm,
-                                        clang::SourceLocation loc) {
-    if (sm.isInSystemHeader(loc))
-      return true;
-    // Use the real file entry, not the presumed location: #line directives in
-    // user source can spoof the presumed filename to look like a runtime
-    // header. The actual FileEntry is independent of #line.
-    const clang::FileEntry *entry = sm.getFileEntryForID(sm.getFileID(loc));
-    if (!entry)
-      return false;
-    llvm::StringRef file = entry->tryGetRealPathName();
-    if (file.empty())
-      return false;
-#ifdef CPLUS_INCLUDE_DIR
-    // Trust only this compiler's resolved runtime include directory. A loose
-    // substring test would trust any user header whose path happens to
-    // contain `/include/cplus/`, allowing a reserved helper to be defined in
-    // user code and bypass the STRICT FFI gate.
-    llvm::SmallString<256> runtimeDir;
-    if (llvm::sys::fs::real_path(CPLUS_INCLUDE_DIR, runtimeDir))
-      return false;
-    llvm::StringRef dir = runtimeDir.str().rtrim('/');
-    if (!file.starts_with(dir))
-      return false;
-    return file.size() == dir.size() || file[dir.size()] == '/';
-#else
-    return file.contains("/runtime/include/") ||
-           file.contains("/include/cplus/") ||
-           file.ends_with("/cplus/cplus.h");
-#endif
-  }
 
 std::set<std::string>
 findUserDeclaredHelperSymbols(const std::string &source,
@@ -2026,11 +2019,7 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (fd->isImplicit() || !isReservedHelperName(fd->getName()))
         return true;
       clang::SourceLocation loc = fd->getLocation();
-      // A user header can interpose a runtime guard just as effectively as a
-      // definition in the main file. Declarations from this compiler's own
-      // runtime headers are trusted even when those headers are supplied with
-      // -I (which Clang does not classify as a system header).
-      if (loc.isValid() && !isCompilerRuntimeLocation(sm, loc))
+      if (loc.isValid() && sm.isInMainFile(loc))
         out.insert(fd->getNameAsString());
       return true;
     }
@@ -2038,87 +2027,12 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (vd->isImplicit() || !isReservedHelperName(vd->getName()))
         return true;
       clang::SourceLocation loc = vd->getLocation();
-      if (loc.isValid() && !isCompilerRuntimeLocation(sm, loc))
+      if (loc.isValid() && sm.isInMainFile(loc))
         out.insert(vd->getNameAsString());
       return true;
     }
   } collector(sm, found);
   collector.TraverseDecl(ctx.getTranslationUnitDecl());
   return found;
-}
-
-// --- Cake-style flow-sensitive qualifiers (issue #179) ----------------------
-// `_Opt`, `_Owner` and `_View` are source-level annotations only. They are
-// erased by the rewriter before C emission, so they have no runtime
-// representation and cannot affect layout, offsets or calling conventions.
-// The rewriter records each occurrence here (declared name + ORIGINAL source
-// line) and the AST safety checker consumes the facts when it walks Clang's
-// AST of the lowered C.  The boundary uses only primitive types so the two
-// consumers need no new shared header.
-namespace {
-
-struct CakeQualRecord {
-  std::string name;
-  unsigned line = 0;
-  int kind = 0; // 1 = _Opt, 2 = _Owner, 3 = _View, 4 = cplus_move site
-};
-
-std::vector<CakeQualRecord> &cakeQualRecords() {
-  static std::vector<CakeQualRecord> records;
-  return records;
-}
-
-} // namespace
-
-void cplusCakeRecordQualifier(const std::string &name, unsigned line,
-                              int kind) {
-  if (name.empty() || kind == 0)
-    return;
-  cakeQualRecords().push_back({name, line, kind});
-}
-
-void cplusCakeClearQualifiers() { cakeQualRecords().clear(); }
-
-int cplusCakeQualifierOf(const std::string &name, unsigned line) {
-  // Reverse order so the innermost / most recent declaration wins when a name
-  // is reused on the same line.
-  for (auto it = cakeQualRecords().rbegin(); it != cakeQualRecords().rend();
-       ++it)
-    if (it->line == line && it->name == name)
-      return it->kind;
-  return 0;
-}
-
-/// Original-source lines of the `cplus_move(name)` sites recorded in this TU,
-/// in source order. The rewriter records each macro invocation because
-/// cplus_move expands to a statement expression and therefore has no
-/// `CallExpr` in the safety AST. Returning the individual sites (rather than a
-/// TU-wide count) lets the Cake checker order moves against assignments and
-/// branch/loop structure; the checker maps each line to a byte offset in the
-/// lowered C buffer before seeding moved state at that site.
-std::vector<unsigned> cplusCakeMoveSites(const std::string &name) {
-  std::vector<unsigned> lines;
-  for (const CakeQualRecord &r : cakeQualRecords())
-    if (r.kind == 4 && r.name == name)
-      lines.push_back(r.line);
-  return lines;
-}
-
-/// Reuse the existing effect summaries to decide whether passing `arg` to
-/// `fn` consumes an owner. Additive: none of the existing FunctionEffect
-/// fields or diagnostic paths are changed.
-bool cplusCakeEffectConsumesArg(const std::string &fn, int arg) {
-  if (fn.empty() || arg < 0)
-    return false;
-  FunctionEffect e = libcEffect(fn);
-  if (e.frees || (e.freedArg >= 0 && e.freedArg == arg))
-    return true;
-  for (int idx : e.ownershipTransferArgs)
-    if (idx == arg)
-      return true;
-  for (int idx : e.freeArgs)
-    if (idx == arg)
-      return true;
-  return false;
 }
 } // namespace cplus

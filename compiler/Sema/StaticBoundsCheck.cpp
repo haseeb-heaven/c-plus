@@ -6725,20 +6725,10 @@ private:
   /// Apply an assignment to the tracked fact for `name`.
   void flowAssign(FlowState &state, const std::string &name, size_t eq) {
     std::vector<size_t> r;
-    int depth = 0;
-    for (size_t k = nextSig(eq); k < toks_.size() && !isPunct(k, ";"); ++k) {
-      if (isPunct(k, "("))
-        ++depth;
-      else if (isPunct(k, ")") && depth > 0)
-        --depth;
-      // A comma only separates declarators/assignments at top level; commas
-      // inside an allocator call (`calloc(n, sz)`, `cplus_new_array(T, n)`)
-      // belong to the RHS and must stay in the tracked expression.
-      if (depth == 0 && isPunct(k, ","))
-        break;
+    for (size_t k = nextSig(eq); k < toks_.size() && !isPunct(k, ";") &&
+                              !isPunct(k, ","); ++k)
       if (!trivia(k))
         r.push_back(k);
-    }
     if (r.empty()) {
       auto it = state.find(name);
       if (it != state.end())
@@ -6749,13 +6739,6 @@ private:
     if (alloc == "malloc" || alloc == "calloc" || alloc == "cplus_alloc" ||
         alloc == "cplus_zalloc" || alloc == "cplus_new" ||
         alloc == "cplus_new_array") {
-      // An allocation whose size is derived from SIZE_MAX traps before it can
-      // return a block, so there is no live owner to leak on any path.
-      for (size_t t : r)
-        if (isIdent(t, "SIZE_MAX")) {
-          state[name] = FlowFact{};
-          return;
-        }
       FlowFact f;
       f.null = FlowNull::Unknown; // allocation may fail; never assume non-null
       f.own = FlowOwn::Live;
