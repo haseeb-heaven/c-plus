@@ -367,7 +367,7 @@ AI assistants were used in the implementation of this project. Heaven created th
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [LICENSE](LICENSE).
 
-## ⚡ Benchmarks and proof (measured, this host, `c+` only)
+## ⚡ Benchmarks and proof (measured, this host, all installed languages)
 
 Five complex workloads, all compiled with **`c+`** and checksum-verified
 (`safe` = default runtime guards, `fast` = `--legacy-c`). Raw binaries and
@@ -394,17 +394,22 @@ optimised away. The `safe` column is the cost of C+ runtime guards; the
 | Datastack bump (`benchmarks/scoped_apps`) | **23 ns/op** |
 | Checked heap, same workload | 206 ns/op |
 
-### Head-to-head - 2M iterations, checksum verified on every binary
+### Head-to-head - 2M iterations, checksum `16776346274400` verified on every binary
 
-| Toolchain | Compile | Runtime | ns/iter |
-|---|---:|---:|---:|
-| Rust `-O` | 796 ms | **2,208,084 ns** | **1.104** (fastest runtime) |
-| Goose native | **220 ms** (fastest compile) | 2,486,000 ns | 1.243 |
-| Zig `ReleaseFast` | 6710 ms | 2,530,000 ns | 1.265 |
-| C+ `--release --sanitize=none` | 1364 ms | 3,604,000 ns | 1.802 |
-| C+ `--default` (guards on) | 1017 ms | 18,780,000 ns | 9.390 |
+| Language / toolchain | Compile | Runtime | ns/iter | Score |
+|---|---:|---:|---:|---|
+| Rust `-O` | 796 ms | **2,208,084 ns** | **1.104** | **fastest runtime** |
+| Goose native (`goose build`) | **220 ms** | 2,486,000 ns | 1.243 | fastest compile |
+| Zig `ReleaseFast` | 6710 ms | 2,530,000 ns | 1.265 | 3rd runtime |
+| C+ `--release --sanitize=none` | 1364 ms | 3,604,000 ns | 1.802 | 4th runtime |
+| C+ `--default` (guards on) | 1017 ms | 18,780,000 ns | 9.390 | guarded mode |
+| C3 | NOT_TESTED | NOT_TESTED | NOT_TESTED | compiler not installed |
+| Fil-C | NOT_TESTED | NOT_TESTED | NOT_TESTED | compiler not installed |
 
-Heavy 200M-iteration loop: C `1.948`, Goose `2.061`, C+ release `2.743`,
+Heavy 200M-iteration loop (checksum `1677765674676096`): C `1.948`,
+Goose `2.061`, C+ release `2.743`, Zig `3.121`, Rust `3.744` ns/iter -
+different workload, different winner. C3/Fil-C binaries absent, so
+`NOT_TESTED` rather than a made-up number.Heavy 200M-iteration loop: C `1.948`, Goose `2.061`, C+ release `2.743`,
 Zig `3.121`, Rust `3.744` ns/iter - different workload, different winner.
 Fil-C/TrapC binaries absent = `NOT_TESTED`.
 
