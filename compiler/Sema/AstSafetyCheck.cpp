@@ -3048,7 +3048,7 @@ public:
     unsigned long long elemSize = 0;
     if ((elem->isIntegerType() || elem->isCharType() ||
          elem->isFloatingType() || elem->isEnumeralType() ||
-         elem->isRecordType()) &&
+         elem->isRecordType() || elem->isPointerType()) &&
         !elem->isDependentType() && !elem->isIncompleteType())
       elemSize = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
     if (elemSize == 0)
@@ -3159,8 +3159,9 @@ public:
                 QualType elem = pt->getPointeeType();
                 unsigned long long es = 0;
                 if ((elem->isIntegerType() || elem->isCharType() ||
-                     elem->isFloatingType() || elem->isEnumeralType()) &&
-                    !elem->isDependentType())
+                     elem->isFloatingType() || elem->isEnumeralType() ||
+                     elem->isRecordType() || elem->isPointerType()) &&
+                    !elem->isDependentType() && !elem->isIncompleteType())
                   es = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
                 if (es != 0) {
                   long long byteOff = off * (long long)es;
@@ -5077,6 +5078,56 @@ public:
     return true;
   }
 
+  // Issue #243: record the stack owner behind a pointer variable from the
+  // value it receives. Shared by declarations and assignments so splitting
+  // an initializer (int *p = &x;) into a declaration plus an assignment
+  // (int *p = 0; p = &x;) cannot launder the borrow.
+  void recordPointerBorrow(const VarDecl *vd, const Expr *value) {
+    if (!vd || !value || !vd->getType()->isPointerType())
+      return;
+    // An assignment replaces the previous value: a later heap store must
+    // clear a borrow recorded earlier for the same variable.
+    returnBorrowOwner_.erase(vd);
+    const Expr *binit = value->IgnoreParenCasts();
+    const VarDecl *owner = localStackOwner(binit);
+    bool addressOf = isa<UnaryOperator>(binit) &&
+                     cast<UnaryOperator>(binit)->getOpcode() == UO_AddrOf;
+    bool stackObject =
+        owner && owner->hasLocalStorage() &&
+        (addressOf || !owner->getType()->isPointerType());
+    const VarDecl *alias = nullptr;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(binit))
+      alias = dyn_cast<VarDecl>(ref->getDecl());
+    if (!alias)
+      if (const auto *call = dyn_cast<CallExpr>(binit))
+        for (const auto &cn : calleeNames(call, call->getDirectCallee())) {
+          auto rp = returnedParam_.find(cn);
+          if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
+            if (const auto *aref = dyn_cast<DeclRefExpr>(
+                    call->getArg(rp->second)->IgnoreParenCasts())) {
+              alias = dyn_cast<VarDecl>(aref->getDecl());
+              if (alias)
+                break;
+            }
+          }
+        }
+    if (stackObject)
+      returnBorrowOwner_[vd] = {owner, vd->getNameAsString()};
+    else if (alias) {
+      auto bit = returnBorrowOwner_.find(alias);
+      if (bit != returnBorrowOwner_.end())
+        returnBorrowOwner_[vd] = bit->second; // keep original source name
+    } else if (isa<ConditionalOperator>(binit) ||
+               (isa<BinaryOperator>(binit) &&
+                cast<BinaryOperator>(binit)->getOpcode() == BO_Comma)) {
+      const VarDecl *bvar = nullptr;
+      std::string bname;
+      if (const VarDecl *o = borrowOwnerInReturn(binit, &bvar, &bname, 1))
+        if (bvar)
+          returnBorrowOwner_[vd] = {o, bname};
+    }
+  }
+
   bool VisitVarDecl(VarDecl *vd) {
     if (vd && !vd->getNameAsString().empty())
       namedVars_[vd->getNameAsString()] = vd->getCanonicalDecl();
@@ -5405,55 +5456,9 @@ public:
     // last element; dereferencing it is undefined even though forming it is ok.
     if (vd->getInit() && isOnePastEndExpr(vd->getInit()))
       onePastEnd_.insert(vd);
-    // Issue #26: record the stack owner behind a pointer local so a later
-    // `return` can be checked on the full AST expression instead of a bare
-    // identifier.  A pointer local initialized from a genuine stack object
-    // (`&x`, `s.field`, `a[i]`, or a non-pointer local array/record) is a borrow;
-    // a pointer local initialized from another pointer is an alias and inherits
-    // that variable's borrow owner.  Heap results are never borrows.
-    if (vd->getType()->isPointerType() && vd->getInit()) {
-      const Expr *binit = vd->getInit()->IgnoreParenCasts();
-      const VarDecl *owner = localStackOwner(binit);
-      bool addressOf = isa<UnaryOperator>(binit) &&
-                       cast<UnaryOperator>(binit)->getOpcode() == UO_AddrOf;
-      bool stackObject =
-          owner && owner->hasLocalStorage() &&
-          (addressOf || !owner->getType()->isPointerType());
-      const VarDecl *alias = nullptr;
-      if (const auto *ref = dyn_cast<DeclRefExpr>(binit))
-        alias = dyn_cast<VarDecl>(ref->getDecl());
-      if (!alias)
-        if (const auto *call = dyn_cast<CallExpr>(binit))
-          for (const auto &cn : calleeNames(call, call->getDirectCallee())) {
-            auto rp = returnedParam_.find(cn);
-            if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
-              if (const auto *aref = dyn_cast<DeclRefExpr>(
-                      call->getArg(rp->second)->IgnoreParenCasts())) {
-                alias = dyn_cast<VarDecl>(aref->getDecl());
-                if (alias)
-                  break;
-              }
-            }
-          }
-      if (stackObject)
-        returnBorrowOwner_[vd] = {owner, vd->getNameAsString()};
-      else if (alias) {
-        auto bit = returnBorrowOwner_.find(alias);
-        if (bit != returnBorrowOwner_.end())
-          returnBorrowOwner_[vd] = bit->second; // keep original source name
-      } else if (isa<ConditionalOperator>(binit) ||
-                 (isa<BinaryOperator>(binit) &&
-                  cast<BinaryOperator>(binit)->getOpcode() == BO_Comma)) {
-        // RAII lowering materializes `return c ? a : b;` and `return (z++, b);`
-        // as a temporary. The expression walker resolves both shapes.
-        const VarDecl *bvar = nullptr;
-        std::string bname;
-        if (const VarDecl *o =
-                borrowOwnerInReturn(binit, &bvar, &bname, 1))
-          if (bvar)
-            returnBorrowOwner_[vd] = {o, bname};
-      }
-    }
+    // Issue #26 / #243: the same borrow facts apply to initializers and to
+    // assignments, so an escape cannot be hidden by a two-step initialization.
+    recordPointerBorrow(vd, vd->getInit());
     // `T *b = &owner;` records a borrow for lifetime/conflict checks.
     if (vd->getType()->isPointerType() && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenCasts();
@@ -5709,6 +5714,13 @@ public:
               me->getBase(), dyn_cast<FieldDecl>(me->getMemberDecl()));
           if (!key.empty())
             stackFieldOwner_[key] = o;
+          // A local struct whose field is assigned the address of a local
+          // carries the same dangling address as an aggregate initializer.
+          const Expr *base = me->getBase()->IgnoreParenCasts();
+          if (const auto *bref = dyn_cast<DeclRefExpr>(base))
+            if (const auto *bvd = dyn_cast<VarDecl>(bref->getDecl()))
+              if (bvd->hasLocalStorage() && bvd->getType()->isRecordType())
+                structLocalAddrVars_.insert(bvd->getNameAsString());
         }
         if (const auto *ref = dyn_cast<DeclRefExpr>(
                 op->getLHS()->IgnoreParenCasts()))
@@ -5726,6 +5738,11 @@ public:
                           identityKeyForDecl(obj);
             }
       }
+      // Issue #243: assignments carry the same borrow facts as initializers.
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              op->getLHS()->IgnoreParenCasts()))
+        if (const auto *pvd = dyn_cast<VarDecl>(ref->getDecl()))
+          recordPointerBorrow(pvd, op->getRHS());
       // `q = realloc(...)` (as opposed to an initializer) also makes q a
       // realloc-result variable, so a later `p = q` can transfer its extent.
       const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
@@ -8390,8 +8407,12 @@ public:
               }
             }
           }
-          if (idx < 0)
+          if (idx < 0) {
+            report(subscript->getBeginLoc(),
+                   std::string("negative flexible array index on ") +
+                       extentLabel(hs->origin));
             return true;
+          }
           QualType elem = famType->getElementType();
           unsigned long long es = ctx_.getTypeSize(elem) / 8u;
           if (es == 0)
