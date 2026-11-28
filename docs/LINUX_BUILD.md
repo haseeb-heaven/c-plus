@@ -75,11 +75,24 @@ CMake configure result (verbatim excerpts):
 -- C+ backend C compiler: /usr/local/bin/clang
 -- Configuring done
 -- Generating done
+[1/17] Building CXX object CMakeFiles/cplus_core.dir/compiler/Diagnostics.cpp.o
+[2/17] Building CXX object CMakeFiles/cplus_core.dir/compiler/Sema/SemaCPlus.cpp.o
 ```
 
 `clang`/`clang++` symlinks to `clang-15` were created inside the container so
 the driver's default backend name resolves. No source warning was suppressed
 and no test was disabled.
+
+**The build did not finish.** While compilation was at 2/17, the running x86
+Colima VM became unresponsive: `docker exec` returned
+`Cannot connect to the Docker daemon at unix:///Users/haseeb-mir/.colima/frida-x86/docker.sock`
+and `colima ssh --profile frida-x86 -- uptime` returned
+`kex_exchange_identification: read: Connection reset by peer`. The host filesystem
+was at 99% capacity at the time (`/System/Volumes/Data`: 3.3 GiB free), and the
+separate arm64 image download had already failed with `no space left on device`.
+No `c+` ELF binary was produced, no CTest suite ran, and no PASS is claimed for
+the x86_64 build. The VM was not restarted because another workload was running
+in that VM and restarting would kill it.
 
 ## 4. aarch64 Linux build: NOT_TESTED (exact blocker)
 
@@ -108,10 +121,11 @@ build was attempted and no aarch64 PASS is claimed.
 | Linux sysroot discovery | NOT_TESTED | none of the searched sysroot locations exist |
 | host cross build, x86_64 ELF compiler | BLOCKED | LLVM archive member is Mach-O arm64, not ELF x86-64 |
 | host cross build, aarch64 ELF compiler | BLOCKED | same Mach-O arm64 archive |
-| native build, x86_64 ELF compiler (container) | see build log | clang-15 / LLVM 15.0.7, configure succeeded |
+| native x86_64 configure (container) | PASS | CMake 3.22.1 + LLVM/Clang 15.0.7 configured successfully |
+| native build, x86_64 ELF compiler (container) | NOT_TESTED | compile reached 2/17; x86 Colima VM then became unreachable (dockerd socket down, SSH reset) |
 | native build, aarch64 ELF compiler | NOT_TESTED | Colima aarch64 VM start: no space left on device |
-| ctest suite | see build log | — |
-| C ABI layout check | NOT_TESTED | no ABI-changing source edit was made; no layout was altered |
+| ctest suite | NOT_TESTED | no built binary; no tests were run |
+| C ABI layout check | NOT_TESTED by execution | no ABI-changing source edit was made; no layout was altered |
 
 "C ABI is sacred": this work added only a shell script and this document. No
 C struct, union, raw pointer, or header layout was touched, so `sizeof` /
