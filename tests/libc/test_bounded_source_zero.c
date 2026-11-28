@@ -1,4 +1,4 @@
-/* S4 regression: check_source_capacity() must normalize a resolved capacity
+/* S4 regression: check_src_capacity() must normalize a resolved capacity
  * of zero to UNKNOWN, as source_capacity() already does in bounded.c.
  *
  * Including the implementation exposes the file-static helper so the zero
@@ -22,11 +22,11 @@ int main(void) {
     if (p == NULL) return 2;
 
     errno = 0;
-    rc = check_source_capacity("test", (const void *)(p + 8u), 1u);
+    rc = check_src_capacity("test", (const void *)(p + 8u), 1u);
     if (rc != 0 || errno != 0) ++failures;
 
     errno = 0;
-    rc = check_source_capacity("test", (const void *)p, 9u);
+    rc = check_src_capacity("test", (const void *)p, 9u);
     if (rc != 1 || errno != ERANGE) ++failures;
 
     cplus_free(p);
