@@ -36,13 +36,23 @@ for mode in default_none ubsan; do
     esac
     exe="$OUT/arena_reset_overflow_$mode"
     blog="$OUT/arena_reset_overflow_$mode.build.log"
+    hobj="$OUT/arena_gen_helper_$mode.o"
+    hblog="$OUT/arena_gen_helper_$mode.build.log"
     sout="$OUT/arena_reset_overflow_$mode.stdout"
     serr="$OUT/arena_reset_overflow_$mode.stderr"
     diffout="$OUT/arena_reset_overflow_$mode.diff"
 
     printf 'BUILD %s\n' "$mode"
+    timeout -k 5 60 "$CPLUS" build "$DIR/arena_gen_helper.cp" $FLAGS -I"$ROOT" \
+        -c -o "$hobj" >"$hblog" 2>&1
+    hrc=$?
+    if [ "$hrc" -ne 0 ]; then
+        echo "BUILD-FAIL helper $mode rc=$hrc (see $hblog)"
+        fail=1
+        continue
+    fi
     timeout -k 5 60 "$CPLUS" build "$DIR/arena_reset_overflow.cp" $FLAGS -I"$ROOT" \
-        -o "$exe" >"$blog" 2>&1
+        -o "$exe" -- "$hobj" >"$blog" 2>&1
     brc=$?
     if [ "$brc" -ne 0 ]; then
         echo "BUILD-FAIL $mode rc=$brc (see $blog)"
