@@ -259,6 +259,20 @@ if matches "issue227_strict"; then
   fi
 fi
 
+# --- issue #241: clearReleased() must not revive dangling aliases ----------
+
+if matches "issue241"; then
+  if CPLUS_BIN="$CPLUS" /bin/sh \
+      "$ROOT/tests/compiler/agent1/regression_issue241.sh" \
+      >"$OUT/issue241.suite.log" 2>&1; then
+    pass "issue241_clear_released_alias"
+  else
+    cat "$OUT/issue241.suite.log" >&2
+    fail "issue241_clear_released_alias" \
+      "see tests/out/issue241.suite.log"
+  fi
+fi
+
 # --- linker inputs must not be lowered as C+ source ------------------------
 
 if matches "link_input_filter"; then

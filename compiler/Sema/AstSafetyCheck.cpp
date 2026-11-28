@@ -3390,26 +3390,10 @@ public:
   void clearReleased(const std::string &name) {
     if (name.empty())
       return;
+    // A fresh value assigned to one name revives ONLY that name.  Every alias
+    // still holds the old (freed) address, so it must stay released: clearing
+    // aliases here lets `p = NULL` launder `q = p` into a UAF/double free.
     releasedVars_.erase(name);
-    auto it = aliasGroups_.find(name);
-    if (it != aliasGroups_.end())
-      for (const auto &alias : it->second)
-        releasedVars_.erase(alias);
-    for (const auto &entry : borrowOwner_)
-      if (entry.second == name)
-        releasedVars_.erase(entry.first);
-    // A fresh value assigned to one view of an object revives all aliases.
-    for (const auto &kv : globalPointsTo_)
-      if (kv.first == name || kv.second.count(name)) {
-        releasedVars_.erase(kv.first);
-        for (const auto &n : kv.second)
-          releasedVars_.erase(n);
-      }
-    for (const auto &kv : provenanceSource_)
-      if (kv.first == name || kv.second == name) {
-        releasedVars_.erase(kv.first);
-        releasedVars_.erase(kv.second);
-      }
   }
 
   /// Canonical key for a struct field / array-element lvalue, used for
