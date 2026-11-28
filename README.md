@@ -21,6 +21,22 @@
 
 C+ ships **Nuklear** and **microui** as standard immediate-mode GUI libraries (MIT-licensed, vendored with their licenses). See [docs/GFX_LIBRARIES.md](docs/GFX_LIBRARIES.md).
 
+## 🆕 New alpha release - try it out
+
+**C+ 0.2.0-alpha is released.** A prebuilt macOS arm64 binary is attached
+to the [GitHub pre-release](https://github.com/haseeb-heaven/c-plus/releases/tag/v0.2.0-alpha).
+Download, extract, add bin/ to PATH, run c+ --version, and build a .cp file.
+Linux and Windows are source-build / compile-only CI today; see platform
+status in docs/LIMITATIONS.md. Feedback and issue reports are welcome on
+[Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) and
+[PR #17](https://github.com/haseeb-heaven/c-plus/pull/17).
+
+```sh
+tar -xzf cplus-alpha-macos-arm64-v020.tar.gz
+cd cplus-alpha-release2 && export PATH=$PWD/bin:$PATH
+c+ --version   # C+ 0.2.0
+```
+
 ## ✨ What is C+?
 
 C+ keeps familiar C syntax and adds compiler-assisted safety checks, deterministic resource cleanup, managed allocation, and a growing standard-library layer.
@@ -187,6 +203,14 @@ cmake --build build --target c+ -- -j4
 | RAII and managed memory | 🟡 Implemented with documented limits |
 | Standard / safer libraries | 🟡 Partial; expanding |
 | Strict safe mode | 🚧 Enforcement and coverage in progress |
+
+> **Honest scope.** The standard library and hardened libc are **in progress**,
+> not a complete ISO C replacement. Library checks **complement** compiler
+> analysis; they do **not** make arbitrary raw pointers safe. C+ is an
+> experimental C-compatible language, not a proof of full memory safety.
+> Details and open work: [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22)
+> and [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17).
+
 
 ### Current work
 
